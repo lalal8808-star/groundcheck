@@ -34,7 +34,7 @@ export async function uploadGrounding(data: {
   }
 }
 
-export async function getLatestGrounding() {
+export async function getLatestGrounding(t?: number) {
   try {
     const result = await sql`
       WITH LatestLogs AS (
@@ -67,7 +67,7 @@ export async function uploadRegistry(title: string, fileData: string, userId: st
   }
 }
 
-export async function getRegistries() {
+export async function getRegistries(t?: number) {
   try {
     const result = await sql`
       SELECT id, title, user_id, created_at, u.name as user_name 

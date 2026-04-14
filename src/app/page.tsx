@@ -75,8 +75,8 @@ export default function GroundCheckApp() {
 
   const refreshData = async () => {
     try {
-      const logs = await getLatestGrounding();
-      const regs = await getRegistries();
+      const logs = await getLatestGrounding(Date.now());
+      const regs = await getRegistries(Date.now());
       setRegistries(regs as any || []);
 
       const names = ['이천S/S'];
@@ -288,7 +288,9 @@ export default function GroundCheckApp() {
       <header id="app-header">
         <div className="header-content">
           <div className="header-left">
-            <div className="logo-icon">⚡</div>
+            <svg className="logo-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
             <div className="header-text">
               <h1 id="main-title">접지관리 시스템</h1>
             </div>
@@ -306,8 +308,14 @@ export default function GroundCheckApp() {
       </header>
 
       <nav className="top-nav">
-        <button className={`nav-btn ${currentView === 'dashboard' ? 'active' : ''}`} style={{ fontSize: '1.2rem', padding: '1rem 2rem' }} onClick={() => setCurrentView('dashboard')}><span style={{fontSize:'1.5rem', marginRight: '0.5rem'}}>📊</span> <span className="btn-label">대시보드</span></button>
-        <button className={`nav-btn ${currentView === 'towers' ? 'active' : ''}`} style={{ fontSize: '1.2rem', padding: '1rem 2rem' }} onClick={() => setCurrentView('towers')}><span style={{fontSize:'1.5rem', marginRight: '0.5rem'}}>🗼</span> <span className="btn-label">철탑목록</span></button>
+        <button className={`nav-btn ${currentView === 'dashboard' ? 'active' : ''}`} style={{ fontSize: '1.2rem', padding: '1rem 2rem' }} onClick={() => setCurrentView('dashboard')}>
+          <svg style={{width:'1.5rem', height:'1.5rem', marginRight:'0.5rem'}} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          <span className="btn-label">대시보드</span>
+        </button>
+        <button className={`nav-btn ${currentView === 'towers' ? 'active' : ''}`} style={{ fontSize: '1.2rem', padding: '1rem 2rem' }} onClick={() => setCurrentView('towers')}>
+          <svg style={{width:'1.5rem', height:'1.5rem', marginRight:'0.5rem'}} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+          <span className="btn-label">철탑목록</span>
+        </button>
       </nav>
 
       {currentView === 'dashboard' ? (
@@ -316,7 +324,7 @@ export default function GroundCheckApp() {
             {/* 사업 현황 */}
             <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem', background: 'white' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                <span style={{ fontSize: '1.1rem' }}>📍</span>
+                <svg style={{width:'1.25rem', height:'1.25rem', color:'var(--primary)'}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>공사 개요</h2>
               </div>
               <div style={{ fontSize: '0.9rem' }}>
@@ -372,8 +380,14 @@ export default function GroundCheckApp() {
             {/* 접지관리대장 */}
             <div className="glass-card" style={{ padding: '1.5rem' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>📂 접지관리대장</h3>
-                  <button className="photo-btn primary" onClick={() => document.getElementById('reg-in')?.click()} disabled={isLoading}>파일 업로드</button>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <svg style={{width:'1.25rem', height:'1.25rem', color:'var(--primary)'}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    접지관리대장
+                  </h3>
+                  <button className="photo-btn primary" onClick={() => document.getElementById('reg-in')?.click()} disabled={isLoading}>
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{width:'1rem', height:'1rem'}}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                    파일 업로드
+                  </button>
                   <input id="reg-in" type="file" onClick={(e) => { (e.target as any).value = '' }} onChange={handleRegistryUpload} style={{ display: 'none' }} />
                </div>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
