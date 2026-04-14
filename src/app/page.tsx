@@ -393,10 +393,13 @@ export default function GroundCheckApp() {
                 </div>
                 <div>
                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
-                     <span>전체 진척도</span>
-                     <span>{progressPct}%</span>
+                     <span style={{ fontWeight: 600 }}>전체 진척도</span>
+                     <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{progressPct}%</span>
                    </div>
                    <div className="progress-track"><div className="progress-fill secondary" style={{ width: `${progressPct}%` }}></div></div>
+                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem', textAlign: 'right' }}>
+                     검산식: 접지철거({stats.removed}) ÷ 전체대상({totalPoints}) × 100
+                   </div>
                 </div>
               </div>
             </div>
@@ -503,7 +506,7 @@ export default function GroundCheckApp() {
         <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && setSelectedTowerId(null)}>
           <div className="modal-content glass-card">
             <div className="modal-header">
-              <h2>{selectedTower.name} 상세 ({currentCircuit}회선)</h2>
+              <h2>{selectedTower.name} 접지상세 ({currentCircuit}회선)</h2>
               <button className="modal-close" onClick={() => setSelectedTowerId(null)}>✕</button>
             </div>
             <div className="modal-body">
@@ -535,6 +538,40 @@ export default function GroundCheckApp() {
           </div>
         </div>
       )}
+
+      {/* Photo history Modal */}
+      {viewingPhoto && (() => {
+        const tower = towers.find(t => t.id === viewingPhoto.towerId);
+        const point = tower?.points.find(p => p.id === viewingPhoto.pointId);
+        const history = point?.history || [];
+        return (
+          <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && setViewingPhoto(null)}>
+            <div className="modal-content glass-card">
+              <div className="modal-header">
+                <h2>{tower?.name} {point?.name} 업로드 기록</h2>
+                <button className="modal-close" onClick={() => setViewingPhoto(null)}>✕</button>
+              </div>
+              <div className="modal-body">
+                {history.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>기록이 없습니다.</p>
+                ) : history.map((h, i) => (
+                  <div key={i} style={{ border: '1px solid var(--border-color)', borderRadius: '0.75rem', overflow: 'hidden' }}>
+                    {h.photo && <img src={h.photo} style={{ width: '100%', display: 'block' }} alt="접지사진" />}
+                    <div style={{ padding: '0.75rem', background: '#f8fafc' }}>
+                      <div style={{ fontWeight: 700, color: h.status === 'grounding' ? 'var(--status-grounding)' : h.status === 'removed' ? 'var(--status-removed)' : 'var(--text-muted)' }}>
+                        {h.status === 'grounding' ? '접지 설치' : h.status === 'removed' ? '접지 철거' : h.status}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                        {h.affiliation} {h.userName} &middot; {new Date(h.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Upload Modal */}
       {selectedPointId && (
