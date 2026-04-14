@@ -155,14 +155,37 @@ export default function GroundCheckApp() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Show preview without necessarily uploading string data to server directly
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
-      setPendingPhotoPreview(event.target?.result as string);
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const MAX_DIM = 1000;
+        let { width, height } = img;
+        if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
+        else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = 'white';
+          ctx.fillRect(0,0,width,height);
+          ctx.drawImage(img, 0, 0, width, height);
+        }
+        
+        setPendingPhotoPreview(canvas.toDataURL('image/jpeg', 0.6));
+        canvas.toBlob((blob) => {
+          if (blob) {
+            // Store the highly compressed blob to be uploaded
+            const compressedFile = new File([blob], file.name || 'photo.jpg', { type: 'image/jpeg' });
+            setPendingPhotoFile(compressedFile);
+          }
+        }, 'image/jpeg', 0.6);
+      };
     };
-
-    setPendingPhotoFile(file);
   };
 
   const handlePhotoUpload = async () => {
@@ -172,16 +195,14 @@ export default function GroundCheckApp() {
     setIsLoading(true);
     setUploadMessage('클라우드 업로드 준비 중...');
     try {
-      // 1. Upload file directly to Vercel Blob from Client (bypassing limits)
       const blob = await upload(pendingPhotoFile.name, pendingPhotoFile, {
         access: 'public',
         handleUploadUrl: '/api/upload',
-        multipart: true,
         onUploadProgress: (e) => {
           if (e.percentage) {
-            setUploadMessage(`고화질 사진 업로드 중... ${e.percentage}%`);
+            setUploadMessage(`고화질 사진 전송 중... ${e.percentage}%`);
           } else {
-            setUploadMessage('고화질 사진 업로드 중...');
+            setUploadMessage('고화질 사진 전송 중...');
           }
         }
       });
@@ -227,7 +248,6 @@ export default function GroundCheckApp() {
        const blob = await upload(file.name, file, {
          access: 'public',
          handleUploadUrl: '/api/upload',
-         multipart: true,
          onUploadProgress: (e) => {
            if (e.percentage) {
              setUploadMessage(`대장 파일 전송 중... ${e.percentage}%`);
