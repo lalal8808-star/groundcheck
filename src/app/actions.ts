@@ -70,7 +70,7 @@ export async function uploadRegistry(title: string, fileData: string, userId: st
 export async function getRegistries(t?: number) {
   try {
     const result = await sql`
-      SELECT id, title, user_id, created_at, u.name as user_name 
+      SELECT id, title, user_id, created_at::text as created_at, u.name as user_name 
       FROM registries r
       LEFT JOIN users u ON r.user_id = u.id
       ORDER BY created_at DESC
