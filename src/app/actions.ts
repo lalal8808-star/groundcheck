@@ -2,6 +2,7 @@
 
 import { sql } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
+import { put } from '@vercel/blob';
 
 export async function registerUser(name: string, affiliation: string) {
   try {
@@ -18,13 +19,24 @@ export async function uploadGrounding(data: {
   towerId: string;
   pointId: string;
   status: string;
-  photoData: string;
+  photoData: string; // This is base64 from client
   userId: string;
 }) {
   try {
+    let finalUrl = data.photoData;
+
+    // If it's a large base64, upload to Blob instead of DB
+    if (data.photoData.startsWith('data:')) {
+      const blob = await put(`photos/${data.towerId}-${data.pointId}-${Date.now()}.jpg`, 
+        Buffer.from(data.photoData.split(',')[1], 'base64'), 
+        { access: 'public', contentType: 'image/jpeg' }
+      );
+      finalUrl = blob.url;
+    }
+
     await sql`
       INSERT INTO grounding_logs (tower_id, point_id, status, photo_data, user_id) 
-      VALUES (${data.towerId}, ${data.pointId}, ${data.status}, ${data.photoData}, ${data.userId})
+      VALUES (${data.towerId}, ${data.pointId}, ${data.status}, ${finalUrl}, ${data.userId})
     `;
     revalidatePath('/');
     return { success: true };
@@ -56,9 +68,21 @@ export async function getLatestGrounding() {
 
 export async function uploadRegistry(title: string, fileData: string, userId: string) {
   try {
-    // If this fails with "too large", we'll know now.
+    let finalUrl = fileData;
+
+    if (fileData.startsWith('data:')) {
+      const mime = fileData.match(/data:([^;]+);/)?.[1] || 'application/octet-stream';
+      const extension = mime.split('/')[1] || 'bin';
+      
+      const blob = await put(`registries/${title}-${Date.now()}.${extension}`, 
+        Buffer.from(fileData.split(',')[1], 'base64'), 
+        { access: 'public', contentType: mime }
+      );
+      finalUrl = blob.url;
+    }
+
     await sql`
-      INSERT INTO registries (title, file_data, user_id) VALUES (${title}, ${fileData}, ${userId})
+      INSERT INTO registries (title, file_data, user_id) VALUES (${title}, ${finalUrl}, ${userId})
     `;
     revalidatePath('/');
     return { success: true };
@@ -86,7 +110,7 @@ export async function getRegistries() {
 export async function getRegistryData(id: string) {
   try {
     const result = await sql`SELECT file_data FROM registries WHERE id = ${id}`;
-    return result[0]?.file_data;
+    return result[0]?.file_data; // This will now be a URL
   } catch (e) {
     console.error(e);
     return null;
