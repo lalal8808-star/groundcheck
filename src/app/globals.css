@@ -68,7 +68,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding-bottom: 80px; /* Spacing for bottom nav */
+  padding-bottom: 20px;
 }
 
 /* Glassmorphism Classes */
@@ -156,21 +156,17 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-/* Bottom Navigation */
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid var(--card-border);
+/* Top Navigation */
+.top-nav {
+  background: var(--bg-color);
+  border-bottom: 1px solid var(--card-border);
   display: flex;
   justify-content: space-around;
-  padding: 0.75rem 1rem;
-  z-index: 50;
-  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  padding: 0.5rem 1rem;
+  z-index: 35;
+  position: sticky;
+  top: 73px; /* Just below header */
+  box-shadow: var(--shadow-sm);
 }
 
 .nav-btn {

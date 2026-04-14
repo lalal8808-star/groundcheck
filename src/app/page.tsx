@@ -56,21 +56,16 @@ export default function GroundCheckApp() {
   const [viewingPhoto, setViewingPhoto] = useState<{ towerId: string; pointId: string } | null>(null);
   const [toastMsg, setToastMsg] = useState('');
 
-  // Auth/Identification
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authForm, setAuthForm] = useState({ name: '', affiliation: '' });
 
-  // Load Data
   useEffect(() => {
-    // 1. Check user
     const savedUser = localStorage.getItem('groundcheck_user');
     if (savedUser) {
       setCurrentUser(JSON.parse(savedUser));
     } else {
       setShowAuthModal(true);
     }
-
-    // 2. Fetch from DB
     refreshData();
   }, []);
 
@@ -80,7 +75,6 @@ export default function GroundCheckApp() {
       const regs = await getRegistries();
       setRegistries(regs as any);
 
-      // Map logs to tower structure
       const names = ['이천S/S'];
       for (let i = 1; i <= 25; i++) names.push(`${i}호`);
       
@@ -90,8 +84,6 @@ export default function GroundCheckApp() {
           ['main', 'sub'].forEach(type => {
             const ptId = `t${i}-c${circuit}-${type}`;
             const ptLogs = logs.filter((l: any) => l.tower_id === `tower-${i}` && l.point_id === ptId);
-            
-            // For simple state mapping, we take the latest
             const latest = ptLogs[0];
             
             points.push({
@@ -113,18 +105,29 @@ export default function GroundCheckApp() {
         return { id: `tower-${i}`, number: name, name: name, points };
       });
       setTowers(initialTowers);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to fetch data", e);
+      if (!towers.length) {
+         // Create local dummy while db uninitialized
+         const names = ['이천S/S'];
+         for (let i = 1; i <= 25; i++) names.push(`${i}호`);
+         const dummy = names.map((n, i) => ({ id: `tower-${i}`, number: n, name: n, points: [] }));
+         setTowers(dummy);
+      }
     }
   };
 
   const handleAuthSubmit = async () => {
     if (!authForm.name || !authForm.affiliation) return;
-    const user = await registerUser(authForm.name, authForm.affiliation);
-    setCurrentUser(user as any);
-    localStorage.setItem('groundcheck_user', JSON.stringify(user));
-    setShowAuthModal(false);
-    showToast(`${user.name} 님, 환영합니다.`);
+    try {
+      const user = await registerUser(authForm.name, authForm.affiliation);
+      setCurrentUser(user as any);
+      localStorage.setItem('groundcheck_user', JSON.stringify(user));
+      setShowAuthModal(false);
+      showToast(`${user.name} 님, 환영합니다.`);
+    } catch (e: any) {
+      alert("회원가입 오류: /api/init-db 설치가 완료되었는지 확인해 주세요. " + e.message);
+    }
   };
 
   const showToast = (msg: string) => {
@@ -132,7 +135,6 @@ export default function GroundCheckApp() {
     setTimeout(() => setToastMsg(''), 3000);
   };
 
-  // Stats calculation
   let totalPoints = 0;
   let stats = { none: 0, grounding: 0, removed: 0, exempt: 0 };
   
@@ -147,22 +149,55 @@ export default function GroundCheckApp() {
 
   const progressPct = totalPoints ? Math.round((stats.removed / totalPoints) * 100) : 0;
 
+  const handleCompress = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Show loading state implicitly by disabling UI or processing
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const MAX_DIM = 800; // compress image dimension to prevent large payloads
+        let { width, height } = img;
+        if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
+        else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.fillStyle = 'white';
+        ctx?.fillRect(0,0,width,height);
+        ctx?.drawImage(img, 0, 0, width, height);
+        // high compression ratio
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        setPendingPhotoData(dataUrl);
+      };
+    };
+  };
+
   const handlePhotoUpload = async () => {
     if (!currentUser) return setShowAuthModal(true);
     if (!selectedTowerId || !selectedPointId || !pendingPhotoData) return;
 
-    await uploadGrounding({
-      towerId: selectedTowerId,
-      pointId: selectedPointId,
-      status: uploadType === 'install' ? 'grounding' : 'removed',
-      photoData: pendingPhotoData,
-      userId: currentUser.id
-    });
-
-    setPendingPhotoData(null);
-    setSelectedPointId(null);
-    refreshData();
-    showToast('업로드가 완료되었습니다.');
+    try {
+      await uploadGrounding({
+        towerId: selectedTowerId,
+        pointId: selectedPointId,
+        status: uploadType === 'install' ? 'grounding' : 'removed',
+        photoData: pendingPhotoData,
+        userId: currentUser.id
+      });
+      setPendingPhotoData(null);
+      setSelectedPointId(null);
+      refreshData();
+      showToast('업로드가 완료되었습니다.');
+    } catch (e: any) {
+      alert("업로드 실패 (DB 연동 또는 용량 오류): " + e.message);
+      console.error(e);
+    }
   };
 
   const handleRegistryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,16 +205,34 @@ export default function GroundCheckApp() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const title = prompt("접지대장 제목을 입력하세요 (예: 1회선 준공계)");
+    const title = prompt("접지관리대장 제목을 입력하세요 (예: 1회선 준공계)");
     if (!title) return;
 
     const reader = new FileReader();
     reader.onload = async (event) => {
-      await uploadRegistry(title, event.target?.result as string, currentUser.id);
-      refreshData();
-      showToast('접지대장이 업로드되었습니다.');
+      try {
+        await uploadRegistry(title, event.target?.result as string, currentUser.id);
+        refreshData();
+        showToast('접지관리대장이 업로드되었습니다.');
+      } catch (e: any) {
+        alert("업로드 실패 (DB 연동 오류): " + e.message);
+      }
     };
     reader.readAsDataURL(file);
+  };
+
+  const getTowerOverallStatus = (tower: Tower) => {
+    const points = tower.points.filter(p => p.circuit === currentCircuit);
+    const groundingCnt = points.filter(p => p.status === 'grounding').length;
+    const removedCnt = points.filter(p => p.status === 'removed').length;
+    const exemptCnt = points.filter(p => p.status === 'exempt').length;
+    const total = points.length;
+    
+    if (exemptCnt === total && total > 0) return 'exempt';
+    if (removedCnt + exemptCnt === total && removedCnt > 0) return 'removed';
+    if (groundingCnt > 0 || removedCnt > 0) return 'grounding';
+    if (exemptCnt > 0) return 'partial_exempt';
+    return 'none';
   };
 
   const selectedTower = towers.find(t => t.id === selectedTowerId);
@@ -206,6 +259,12 @@ export default function GroundCheckApp() {
           </div>
         </div>
       </header>
+
+      {/* Nav positioned right below header now */}
+      <nav className="top-nav">
+        <button className={`nav-btn ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => setCurrentView('dashboard')}>📊 <span className="btn-label">대시보드</span></button>
+        <button className={`nav-btn ${currentView === 'towers' ? 'active' : ''}`} onClick={() => setCurrentView('towers')}>🗼 <span className="btn-label">철탑목록</span></button>
+      </nav>
 
       {currentView === 'dashboard' ? (
         <section className="view active">
@@ -240,36 +299,8 @@ export default function GroundCheckApp() {
               </div>
             </div>
 
-            {/* 접지대장 관리 Card */}
+            {/* 접지 현황 Card */}
             <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
-               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
-                  <h3 style={{fontSize:'1.1rem', fontWeight:700}}>📂 접지대장 관리</h3>
-                  <button className="photo-btn primary" onClick={() => document.getElementById('reg-in')?.click()}>대장 업로드</button>
-                  <input id="reg-in" type="file" onChange={handleRegistryUpload} style={{display:'none'}} />
-               </div>
-               <div style={{display:'flex', flexDirection:'column', gap: '0.75rem'}}>
-                  {registries.length === 0 && <p style={{fontSize:'0.85rem', color:'var(--text-muted)', textAlign:'center', padding:'1rem'}}>등록된 접지대장이 없습니다.</p>}
-                  {registries.map(reg => (
-                    <div key={reg.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.02)', padding:'0.75rem', borderRadius:8, border:'1px solid var(--card-border)'}}>
-                      <div style={{display:'flex', flexDirection:'column'}}>
-                        <span style={{fontSize:'0.9rem', fontWeight:600}}>{reg.title}</span>
-                        <span style={{fontSize:'0.7rem', color:'var(--text-muted)'}}>{reg.user_name} | {new Date(reg.created_at).toLocaleDateString()}</span>
-                      </div>
-                      <div style={{display:'flex', gap:'0.5rem'}}>
-                        <button className="photo-btn" onClick={() => {
-                          const link = document.createElement('a');
-                          link.href = reg.file_data;
-                          link.download = reg.title;
-                          link.click();
-                        }} style={{fontSize:'0.75rem'}}>다운로드</button>
-                        <button className="photo-btn danger" onClick={async () => { if(confirm('삭제하시겠습니까?')) { await deleteRegistry(reg.id); refreshData(); } }} style={{padding:'4px 8px'}}>🗑️</button>
-                      </div>
-                    </div>
-                  ))}
-               </div>
-            </div>
-
-            <div className="glass-card" style={{ padding: '1.5rem' }}>
               <h3 className="section-title" style={{ marginTop: 0, borderBottom: '1px solid var(--card-border)', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
                 접지 현황 ({currentCircuit}회선)
               </h3>
@@ -303,37 +334,88 @@ export default function GroundCheckApp() {
                 </div>
               </div>
             </div>
+
+            {/* 접지관리대장 Card (Moved and renamed) */}
+            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
+               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+                  <h3 style={{fontSize:'1.1rem', fontWeight:700}}>📂 접지관리대장</h3>
+                  <button className="photo-btn primary" onClick={() => document.getElementById('reg-in')?.click()}>파일 업로드</button>
+                  <input id="reg-in" type="file" onChange={handleRegistryUpload} style={{display:'none'}} />
+               </div>
+               <div style={{display:'flex', flexDirection:'column', gap: '0.75rem'}}>
+                  {registries.length === 0 && <p style={{fontSize:'0.85rem', color:'var(--text-muted)', textAlign:'center', padding:'1rem'}}>등록된 대장이 없습니다.</p>}
+                  {registries.map(reg => (
+                    <div key={reg.id} style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.02)', padding:'0.75rem', borderRadius:8, border:'1px solid var(--card-border)'}}>
+                      <div style={{display:'flex', flexDirection:'column'}}>
+                        <span style={{fontSize:'0.9rem', fontWeight:600}}>{reg.title}</span>
+                        <span style={{fontSize:'0.7rem', color:'var(--text-muted)'}}>{reg.user_name} | {new Date(reg.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <div style={{display:'flex', gap:'0.5rem'}}>
+                        <button className="photo-btn" onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = reg.file_data;
+                          link.download = reg.title;
+                          link.click();
+                        }} style={{fontSize:'0.75rem'}}>다운로드</button>
+                        <button className="photo-btn danger" onClick={async () => { if(confirm('삭제하시겠습니까?')) { try{ await deleteRegistry(reg.id); refreshData(); } catch(e:any) { alert("오류: "+e.message) } } }} style={{padding:'4px 8px'}}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+               </div>
+            </div>
+
           </div>
         </section>
       ) : (
         <section className="view active">
-           {/* Tower View logic remains similar, simplified for now to ensure working migration */}
+          {/* Towers View List */}
           <div className="towers-container">
+            <div className="towers-toolbar">
+              <div className="filter-group">
+                {['all', 'none', 'grounding', 'removed', 'exempt'].map(f => (
+                  <button 
+                    key={f}
+                    className={`filter-btn ${currentFilter === f ? 'active' : ''}`}
+                    onClick={() => setCurrentFilter(f)}>
+                    {f === 'all' ? '전체' : f === 'none' ? '미등록' : f === 'grounding' ? '접지중' : f === 'removed' ? '작업완료' : '비대상'}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="tower-list">
-              {towers.map(tower => (
-                <div key={tower.id} className="tower-item glass-card" onClick={() => setSelectedTowerId(tower.id)}>
-                   <div className="tower-info-basic">
-                      <div className="tower-number">{tower.name}</div>
-                      <div style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>
-                        {tower.points.filter(p => p.circuit === currentCircuit && p.status === 'grounding').length > 0 ? <span style={{color:'var(--status-grounding)'}}>접지중</span> : '정상'}
-                      </div>
-                   </div>
-                   <div className="status-dots">
-                      {tower.points.filter(p => p.circuit === currentCircuit).map(p => (
-                        <div key={p.id} className={`status-circle ${p.status === 'grounding' ? 'grounding' : p.status === 'removed' ? 'removed' : ''}`} />
-                      ))}
-                   </div>
-                </div>
-              ))}
+              {towers.filter(tower => {
+                 if (currentFilter !== 'all') {
+                    const overall = getTowerOverallStatus(tower);
+                    if (currentFilter === 'none' && overall !== 'none') return false;
+                    if (currentFilter === 'grounding' && overall !== 'grounding') return false;
+                    if (currentFilter === 'removed' && overall !== 'removed') return false;
+                    if (currentFilter === 'exempt' && (overall !== 'exempt' && overall !== 'partial_exempt')) return false;
+                 }
+                 return true;
+              }).map(tower => {
+                 const points = tower.points.filter(p => p.circuit === currentCircuit);
+                 let nc = 0, gc = 0, rc = 0, ec = 0;
+                 points.forEach(p => { if(p.status==='none')nc++; else if(p.status==='grounding')gc++; else if(p.status==='removed')rc++; else if(p.status==='exempt')ec++ });
+                 return (
+                  <div key={tower.id} className="tower-item glass-card" onClick={() => setSelectedTowerId(tower.id)}>
+                     <div className="tower-info-basic">
+                        <div className="tower-number">{tower.name}</div>
+                        <div style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>
+                          <span style={{color:'var(--status-none)'}}>미등록 {nc}</span> / <span style={{color:'var(--status-grounding)'}}>접지 {gc}</span> / <span style={{color:'var(--status-removed)'}}>철거 {rc}</span>
+                        </div>
+                     </div>
+                     <div className="status-dots">
+                        {points.map(p => (
+                          <div key={p.id} className={`status-circle ${p.status === 'grounding' ? 'grounding' : p.status === 'removed' ? 'removed' : p.status === 'exempt' ? 'exempt' : ''}`} />
+                        ))}
+                     </div>
+                  </div>
+                 )
+              })}
             </div>
           </div>
         </section>
       )}
-
-      <nav className="bottom-nav">
-        <button className={`nav-btn ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => setCurrentView('dashboard')}>📊 <span className="btn-label">대시보드</span></button>
-        <button className={`nav-btn ${currentView === 'towers' ? 'active' : ''}`} onClick={() => setCurrentView('towers')}>🗼 <span className="btn-label">철탑목록</span></button>
-      </nav>
 
       {/* Auth Modal */}
       {showAuthModal && (
@@ -343,8 +425,8 @@ export default function GroundCheckApp() {
              <div className="modal-body">
                 <p style={{fontSize:'0.9rem', color:'var(--text-muted)'}}>사진 및 대장 업로드를 위해 소속과 이름을 입력해 주세요.</p>
                 <div style={{display:'flex', flexDirection:'column', gap:'1rem', marginTop:'1rem'}}>
-                  <input type="text" placeholder="소속 (예: 가남전력)" className="search-box" value={authForm.affiliation} onChange={e => setAuthForm({...authForm, affiliation: e.target.value})} style={{padding:12}} />
-                  <input type="text" placeholder="이름" className="search-box" value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})} style={{padding:12}} />
+                  <input type="text" placeholder="소속 (예: 가남전력)" className="search-box" value={authForm.affiliation} onChange={e => setAuthForm({...authForm, affiliation: e.target.value})} style={{padding:12, border:'1px solid #ccc', borderRadius:'8px'}} />
+                  <input type="text" placeholder="이름" className="search-box" value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})} style={{padding:12, border:'1px solid #ccc', borderRadius:'8px'}} />
                   <button className="btn-upload" onClick={handleAuthSubmit}>등록 및 로그인</button>
                 </div>
              </div>
@@ -352,7 +434,7 @@ export default function GroundCheckApp() {
         </div>
       )}
 
-      {/* Detail Modal with Uploader Info */}
+      {/* Detail Modal */}
       {selectedTower && (
         <div className="modal-overlay active" onClick={(e) => e.target === e.currentTarget && setSelectedTowerId(null)}>
           <div className="modal-content glass-card">
@@ -387,39 +469,35 @@ export default function GroundCheckApp() {
         </div>
       )}
 
-      {/* Upload Modal (Reuse mostly same logic) */}
+      {/* Upload Modal */}
       {selectedPointId && (
         <div className="modal-overlay active">
           <div className="modal-content glass-card" style={{maxWidth:400, margin:'auto'}}>
              <div className="modal-header"><h2>사진 업로드</h2></div>
              <div className="upload-body">
-                <input type="file" accept="image/*" onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if(!file) return;
-                  const reader = new FileReader();
-                  reader.onload = (ev) => setPendingPhotoData(ev.target?.result as string);
-                  reader.readAsDataURL(file);
-                }} />
+                <input type="file" accept="image/*" onChange={handleCompress} />
                 {pendingPhotoData && <img src={pendingPhotoData} style={{maxWidth:'100%', marginTop:10}} />}
                 <div className="upload-actions" style={{marginTop:20}}>
                    <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoData(null); }}>취소</button>
-                   <button className="btn-upload" onClick={handlePhotoUpload}>업로드</button>
+                   <button className="btn-upload" onClick={handlePhotoUpload} disabled={!pendingPhotoData}>업로드</button>
                 </div>
              </div>
           </div>
         </div>
       )}
 
-      {/* Photo View with deletion */}
+      {/* Photo View / Deletion */}
       {viewingPhoto && (
         <div className="modal-overlay active" onClick={() => setViewingPhoto(null)}>
            <div className="modal-content glass-card" style={{maxWidth:600, margin:'auto', padding:20}}>
               <img src={towers.find(t => t.id === viewingPhoto.towerId)?.points.find(p => p.id === viewingPhoto.pointId)?.history[0]?.photo} style={{width:'100%'}} />
               <button className="photo-btn danger" style={{marginTop:10, width:'100%'}} onClick={async () => {
                 if(confirm('기록을 삭제하시겠습니까?')) {
-                  await deleteGroundingLog(viewingPhoto.towerId, viewingPhoto.pointId);
-                  setViewingPhoto(null);
-                  refreshData();
+                  try {
+                    await deleteGroundingLog(viewingPhoto.towerId, viewingPhoto.pointId);
+                    setViewingPhoto(null);
+                    refreshData();
+                  } catch(e: any) { alert("삭제 실패: " + e.message) }
                 }
               }}>🗑️ 기록 삭제</button>
            </div>
