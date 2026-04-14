@@ -76,8 +76,10 @@ export default function GroundCheckApp() {
   const refreshData = async () => {
     try {
       const logs = await getLatestGrounding(Date.now());
-      const regs = await getRegistries(Date.now());
-      setRegistries(regs as any || []);
+      // Fetch registries via stable API route to prevent serialisation issues
+      const regsRes = await fetch('/api/registries?t=' + Date.now());
+      const regs = await regsRes.json();
+      setRegistries(regs || []);
 
       const names = ['이천S/S'];
       for (let i = 1; i <= 25; i++) names.push(`${i}호`);
@@ -347,7 +349,7 @@ export default function GroundCheckApp() {
 
             {/* 접지 현황 */}
             <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
-              <h3 className="section-title">접지 현황 ({currentCircuit}회선)</h3>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-main)' }}>접지 현황 ({currentCircuit}회선)</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: '#f8fafc', borderRadius: 12 }}>
                   <span>총 대상개소 <small>(비대상 제외)</small></span>

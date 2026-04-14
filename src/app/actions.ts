@@ -75,6 +75,7 @@ export async function getRegistries(t?: number) {
       LEFT JOIN users u ON r.user_id = u.id
       ORDER BY created_at DESC
     `;
+    console.log('[getRegistries] fetched count:', result.length, result.map(r => r.title));
     return result;
   } catch (e) {
     console.error(e);
