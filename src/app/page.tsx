@@ -168,9 +168,11 @@ export default function GroundCheckApp() {
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        ctx?.fillStyle = 'white';
-        ctx?.fillRect(0,0,width,height);
-        ctx?.drawImage(img, 0, 0, width, height);
+        if (ctx) {
+          ctx.fillStyle = 'white';
+          ctx.fillRect(0,0,width,height);
+          ctx.drawImage(img, 0, 0, width, height);
+        }
         // high compression ratio
         const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
         setPendingPhotoData(dataUrl);
