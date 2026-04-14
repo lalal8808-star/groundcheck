@@ -198,12 +198,8 @@ export default function GroundCheckApp() {
       const blob = await upload(pendingPhotoFile.name, pendingPhotoFile, {
         access: 'public',
         handleUploadUrl: '/api/upload',
-        onUploadProgress: (e) => {
-          if (e.percentage) {
-            setUploadMessage(`고화질 사진 전송 중... ${e.percentage}%`);
-          } else {
-            setUploadMessage('고화질 사진 전송 중...');
-          }
+        onUploadProgress: () => {
+          setUploadMessage('파일 전송 중...');
         }
       });
 
@@ -241,19 +237,15 @@ export default function GroundCheckApp() {
     if (!title) return;
 
     setIsLoading(true);
-    setUploadMessage('대장 파일 전송 준비 중...');
+    setUploadMessage('파일 전송 준비 중...');
     
     try {
        // 1. Upload large document securely directly from browser to S3 / Blob
        const blob = await upload(file.name, file, {
          access: 'public',
          handleUploadUrl: '/api/upload',
-         onUploadProgress: (e) => {
-           if (e.percentage) {
-             setUploadMessage(`대장 파일 전송 중... ${e.percentage}%`);
-           } else {
-             setUploadMessage('대장 파일 전송 중... (용량이 클수록 오래 걸립니다)');
-           }
+         onUploadProgress: () => {
+           setUploadMessage('파일 전송 중...');
          }
        });
 
