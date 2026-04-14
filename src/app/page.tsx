@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { registerUser, uploadGrounding, getLatestGrounding, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt } from './actions';
+import { registerUser, uploadGrounding, getLatestGrounding, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData } from './actions';
 
 type User = {
   id: string;
