@@ -75,3 +75,12 @@ export async function deleteGroundingLog(towerId: string, pointId: string) {
   `;
   revalidatePath('/');
 }
+
+export async function togglePointExempt(towerId: string, pointId: string, userId: string, isExempt: boolean) {
+  const status = isExempt ? 'exempt' : 'none';
+  await sql`
+    INSERT INTO grounding_logs (tower_id, point_id, status, user_id) 
+    VALUES (${towerId}, ${pointId}, ${status}, ${userId})
+  `;
+  revalidatePath('/');
+}
