@@ -18,13 +18,13 @@ export async function uploadGrounding(data: {
   towerId: string;
   pointId: string;
   status: string;
-  photoUrl: string; 
+  photoData: string; 
   userId: string;
 }) {
   try {
     await sql`
       INSERT INTO grounding_logs (tower_id, point_id, status, photo_data, user_id) 
-      VALUES (${data.towerId}, ${data.pointId}, ${data.status}, ${data.photoUrl}, ${data.userId})
+      VALUES (${data.towerId}, ${data.pointId}, ${data.status}, ${data.photoData}, ${data.userId})
     `;
     revalidatePath('/');
     return { success: true };
@@ -54,10 +54,10 @@ export async function getLatestGrounding() {
   }
 }
 
-export async function uploadRegistry(title: string, fileUrl: string, userId: string) {
+export async function uploadRegistry(title: string, fileData: string, userId: string) {
   try {
     await sql`
-      INSERT INTO registries (title, file_data, user_id) VALUES (${title}, ${fileUrl}, ${userId})
+      INSERT INTO registries (title, file_data, user_id) VALUES (${title}, ${fileData}, ${userId})
     `;
     revalidatePath('/');
     return { success: true };

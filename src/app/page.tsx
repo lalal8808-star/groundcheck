@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { registerUser, uploadGrounding, getLatestGrounding, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData } from './actions';
-import { upload } from '@vercel/blob/client';
 
 type User = {
   id: string;
@@ -54,8 +53,6 @@ export default function GroundCheckApp() {
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<'install' | 'remove'>('install');
   
-  // Replace direct base64 data with raw file objects to manage upload
-  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
   const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
 
   const [viewingPhoto, setViewingPhoto] = useState<{ towerId: string; pointId: string } | null>(null);
@@ -177,43 +174,25 @@ export default function GroundCheckApp() {
         }
         
         setPendingPhotoPreview(canvas.toDataURL('image/jpeg', 0.6));
-        canvas.toBlob((blob) => {
-          if (blob) {
-            // Store the highly compressed blob to be uploaded
-            const compressedFile = new File([blob], file.name || 'photo.jpg', { type: 'image/jpeg' });
-            setPendingPhotoFile(compressedFile);
-          }
-        }, 'image/jpeg', 0.6);
       };
     };
   };
 
   const handlePhotoUpload = async () => {
     if (!currentUser) return setShowAuthModal(true);
-    if (!selectedTowerId || !selectedPointId || !pendingPhotoFile) return;
+    if (!selectedTowerId || !selectedPointId || !pendingPhotoPreview) return;
 
     setIsLoading(true);
-    setUploadMessage('클라우드 업로드 준비 중...');
+    setUploadMessage('파일 전송 중...');
     try {
-      const blob = await upload(pendingPhotoFile.name, pendingPhotoFile, {
-        access: 'public',
-        handleUploadUrl: '/api/upload',
-        onUploadProgress: () => {
-          setUploadMessage('파일 전송 중...');
-        }
-      });
-
-      setUploadMessage('데이터베이스 기록 중...');
-      // 2. Transmit only the resulting short URL to the Server Action
       const resp = await uploadGrounding({
         towerId: selectedTowerId,
         pointId: selectedPointId,
         status: uploadType === 'install' ? 'grounding' : 'removed',
-        photoUrl: blob.url,
+        photoData: pendingPhotoPreview,
         userId: currentUser.id
       });
       if (resp.success) {
-        setPendingPhotoFile(null);
         setPendingPhotoPreview(null);
         setSelectedPointId(null);
         await refreshData();
@@ -234,36 +213,40 @@ export default function GroundCheckApp() {
     if (!file) return;
 
     const title = prompt("접지관리대장 제목을 입력하세요");
-    if (!title) return;
+    if (!title) {
+       if (e.target) e.target.value = '';
+       return;
+    }
 
     setIsLoading(true);
-    setUploadMessage('파일 전송 준비 중...');
+    setUploadMessage('파일 전송 중...');
     
-    try {
-       // 1. Upload large document securely directly from browser to S3 / Blob
-       const blob = await upload(file.name, file, {
-         access: 'public',
-         handleUploadUrl: '/api/upload',
-         onUploadProgress: () => {
-           setUploadMessage('파일 전송 중...');
-         }
-       });
-
-       setUploadMessage('데이터베이스 기록 중...');
-       // 2. Save only the external access URL into database
-       const resp = await uploadRegistry(title, blob.url, currentUser.id);
-       if (resp.success) {
-          await refreshData();
-          showToast('대장이 성공적으로 등록되었습니다.');
-       } else {
-          alert("대장 기록 실패: " + resp.error);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+       const fileData = event.target?.result as string;
+       if (fileData.length > 4500000) {
+          alert("파일 용량이 너무 큽니다. (약 3MB 한도 초과)");
+          setIsLoading(false);
+          if (e.target) e.target.value = '';
+          return;
        }
-    } catch (e: any) {
-      alert("대장 파일 업로드 에러: " + e.message);
-    } finally {
-      setIsLoading(false);
-      if (e.target) e.target.value = ''; // Reset input
-    }
+       
+       try {
+         const resp = await uploadRegistry(title, fileData, currentUser.id);
+         if (resp.success) {
+            await refreshData();
+            showToast('대장이 성공적으로 등록되었습니다.');
+         } else {
+            alert("대장 기록 실패: " + resp.error);
+         }
+       } catch (err: any) {
+         alert("대장 파일 업로드 에러: " + err.message);
+       } finally {
+         setIsLoading(false);
+         if (e.target) e.target.value = '';
+       }
+    };
+    reader.readAsDataURL(file);
   };
 
   const toggleExempt = async (tId: string, pId: string, currentStatus: string) => {
@@ -308,7 +291,6 @@ export default function GroundCheckApp() {
             <div className="logo-icon">⚡</div>
             <div className="header-text">
               <h1 id="main-title">접지관리 시스템</h1>
-              <p className="project-name" style={{margin:0}}>154kV 이천-가남 등 2개T/L</p>
             </div>
           </div>
           <div className="header-right">
@@ -324,8 +306,8 @@ export default function GroundCheckApp() {
       </header>
 
       <nav className="top-nav">
-        <button className={`nav-btn ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => setCurrentView('dashboard')}>📊 <span className="btn-label">대시보드</span></button>
-        <button className={`nav-btn ${currentView === 'towers' ? 'active' : ''}`} onClick={() => setCurrentView('towers')}>🗼 <span className="btn-label">철탑목록</span></button>
+        <button className={`nav-btn ${currentView === 'dashboard' ? 'active' : ''}`} style={{ fontSize: '1.2rem', padding: '1rem 2rem' }} onClick={() => setCurrentView('dashboard')}><span style={{fontSize:'1.5rem', marginRight: '0.5rem'}}>📊</span> <span className="btn-label">대시보드</span></button>
+        <button className={`nav-btn ${currentView === 'towers' ? 'active' : ''}`} style={{ fontSize: '1.2rem', padding: '1rem 2rem' }} onClick={() => setCurrentView('towers')}><span style={{fontSize:'1.5rem', marginRight: '0.5rem'}}>🗼</span> <span className="btn-label">철탑목록</span></button>
       </nav>
 
       {currentView === 'dashboard' ? (
@@ -505,8 +487,8 @@ export default function GroundCheckApp() {
                 <input type="file" accept="image/*" onClick={(e) => { (e.target as any).value = '' }} onChange={handleFileSelect} disabled={isLoading} />
                 {pendingPhotoPreview && <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />}
                 <div className="upload-actions" style={{ marginTop: 20 }}>
-                   <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoPreview(null); setPendingPhotoFile(null); }} disabled={isLoading}>취소</button>
-                   <button className="btn-upload" onClick={handlePhotoUpload} disabled={!pendingPhotoFile || isLoading}>
+                   <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoPreview(null); }} disabled={isLoading}>취소</button>
+                   <button className="btn-upload" onClick={handlePhotoUpload} disabled={!pendingPhotoPreview || isLoading}>
                      {isLoading ? "업로드 중..." : "업로드"}
                    </button>
                 </div>
