@@ -61,6 +61,7 @@ export default function GroundCheckApp() {
   const [viewingPhoto, setViewingPhoto] = useState<{ towerId: string; pointId: string } | null>(null);
   const [toastMsg, setToastMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('');
 
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authForm, setAuthForm] = useState({ name: '', affiliation: '' });
@@ -169,13 +170,23 @@ export default function GroundCheckApp() {
     if (!selectedTowerId || !selectedPointId || !pendingPhotoFile) return;
 
     setIsLoading(true);
+    setUploadMessage('클라우드 업로드 준비 중...');
     try {
       // 1. Upload file directly to Vercel Blob from Client (bypassing limits)
       const blob = await upload(pendingPhotoFile.name, pendingPhotoFile, {
         access: 'public',
         handleUploadUrl: '/api/upload',
+        multipart: true,
+        onUploadProgress: (e) => {
+          if (e.percentage) {
+            setUploadMessage(`고화질 사진 업로드 중... ${e.percentage}%`);
+          } else {
+            setUploadMessage('고화질 사진 업로드 중...');
+          }
+        }
       });
 
+      setUploadMessage('데이터베이스 기록 중...');
       // 2. Transmit only the resulting short URL to the Server Action
       const resp = await uploadGrounding({
         towerId: selectedTowerId,
@@ -209,14 +220,24 @@ export default function GroundCheckApp() {
     if (!title) return;
 
     setIsLoading(true);
+    setUploadMessage('대장 파일 전송 준비 중...');
     
     try {
        // 1. Upload large document securely directly from browser to S3 / Blob
        const blob = await upload(file.name, file, {
          access: 'public',
          handleUploadUrl: '/api/upload',
+         multipart: true,
+         onUploadProgress: (e) => {
+           if (e.percentage) {
+             setUploadMessage(`대장 파일 전송 중... ${e.percentage}%`);
+           } else {
+             setUploadMessage('대장 파일 전송 중... (용량이 클수록 오래 걸립니다)');
+           }
+         }
        });
 
+       setUploadMessage('데이터베이스 기록 중...');
        // 2. Save only the external access URL into database
        const resp = await uploadRegistry(title, blob.url, currentUser.id);
        if (resp.success) {
@@ -482,7 +503,14 @@ export default function GroundCheckApp() {
       )}
 
       {/* Loading Bar / Toast */}
-      {isLoading && <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: 4, background: 'var(--primary)', zIndex: 9999, animation: 'loading 2s infinite' }} />}
+      {isLoading && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.7)', color: 'white', padding: '1rem', textAlign: 'center', fontSize: '0.9rem', fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+          <div>{uploadMessage || '처리 중입니다... 잠시만 기다려주세요.'}</div>
+          <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 2, overflow: 'hidden' }}>
+             <div style={{ width: '100%', height: '100%', background: 'var(--primary)', animation: 'loading 1.5s infinite ease-in-out' }} />
+          </div>
+        </div>
+      )}
       <div id="toast" className={`toast ${toastMsg ? 'show' : ''}`}>{toastMsg}</div>
        <style jsx>{`
          @keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
