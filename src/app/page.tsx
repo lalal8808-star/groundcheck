@@ -326,7 +326,6 @@ export default function GroundCheckApp() {
             {/* 사업 현황 */}
             <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem', background: 'white' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                <svg style={{width:'1.25rem', height:'1.25rem', color:'var(--primary)'}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>공사 개요</h2>
               </div>
               <div style={{ fontSize: '0.9rem' }}>
@@ -409,21 +408,25 @@ export default function GroundCheckApp() {
                                return;
                             }
                             
-                            const response = await fetch(dataUrl);
-                            const blob = await response.blob();
+                            // Parse base64 data URL directly (preserves MIME type)
+                            const [header, base64Data] = dataUrl.split(',');
+                            const mimeMatch = header.match(/:(.*?);/);
+                            const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+                            const byteChars = atob(base64Data);
+                            const byteArr = new Uint8Array(byteChars.length);
+                            for (let i = 0; i < byteChars.length; i++) {
+                              byteArr[i] = byteChars.charCodeAt(i);
+                            }
+                            const blob = new Blob([byteArr], { type: mimeType });
                             const blobUrl = URL.createObjectURL(blob);
                             
-                            const newTab = window.open(blobUrl, '_blank');
-                            if (!newTab) {
-                               const link = document.createElement('a');
-                               link.href = blobUrl;
-                               link.download = reg.title;
-                               document.body.appendChild(link);
-                               link.click();
-                               document.body.removeChild(link);
-                            }
-                            
-                            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                            const link = document.createElement('a');
+                            link.href = blobUrl;
+                            link.download = reg.title;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
                           } catch (e: any) {
                             alert("열기 실패: " + e.message);
                           } finally {
