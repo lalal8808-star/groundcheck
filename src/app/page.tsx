@@ -455,7 +455,7 @@ export default function GroundCheckApp() {
       )}
 
       {/* Loading Bar / Toast */}
-      {isLoading && <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: 4, background: 'var(--primary)', z-index: 9999, animation: 'loading 2s infinite' }} />}
+      {isLoading && <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: 4, background: 'var(--primary)', zIndex: 9999, animation: 'loading 2s infinite' }} />}
       <div id="toast" className={`toast ${toastMsg ? 'show' : ''}`}>{toastMsg}</div>
        <style jsx>{`
          @keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
