@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { registerUser, uploadGrounding, getLatestGrounding, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData } from './actions';
+import { upload } from '@vercel/blob/client';
 
 type User = {
   id: string;
@@ -52,7 +53,11 @@ export default function GroundCheckApp() {
   const [selectedTowerId, setSelectedTowerId] = useState<string | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<'install' | 'remove'>('install');
-  const [pendingPhotoData, setPendingPhotoData] = useState<string | null>(null);
+  
+  // Replace direct base64 data with raw file objects to manage upload
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
+  const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
+
   const [viewingPhoto, setViewingPhoto] = useState<{ towerId: string; pointId: string } | null>(null);
   const [toastMsg, setToastMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -145,58 +150,51 @@ export default function GroundCheckApp() {
 
   const progressPct = totalPoints ? Math.round((stats.removed / totalPoints) * 100) : 0;
 
-  const handleCompress = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Show preview without necessarily uploading string data to server directly
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const MAX_DIM = 1000;
-        let { width, height } = img;
-        if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
-        else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.fillStyle = 'white';
-          ctx.fillRect(0,0,width,height);
-          ctx.drawImage(img, 0, 0, width, height);
-        }
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-        setPendingPhotoData(dataUrl);
-      };
+      setPendingPhotoPreview(event.target?.result as string);
     };
+
+    setPendingPhotoFile(file);
   };
 
   const handlePhotoUpload = async () => {
     if (!currentUser) return setShowAuthModal(true);
-    if (!selectedTowerId || !selectedPointId || !pendingPhotoData) return;
+    if (!selectedTowerId || !selectedPointId || !pendingPhotoFile) return;
 
     setIsLoading(true);
     try {
+      // 1. Upload file directly to Vercel Blob from Client (bypassing limits)
+      const blob = await upload(pendingPhotoFile.name, pendingPhotoFile, {
+        access: 'public',
+        handleUploadUrl: '/api/upload',
+      });
+
+      // 2. Transmit only the resulting short URL to the Server Action
       const resp = await uploadGrounding({
         towerId: selectedTowerId,
         pointId: selectedPointId,
         status: uploadType === 'install' ? 'grounding' : 'removed',
-        photoData: pendingPhotoData,
+        photoUrl: blob.url,
         userId: currentUser.id
       });
       if (resp.success) {
-        setPendingPhotoData(null);
+        setPendingPhotoFile(null);
+        setPendingPhotoPreview(null);
         setSelectedPointId(null);
         await refreshData();
         showToast('업로드가 완료되었습니다.');
       } else {
-        alert("업로드 실패: " + resp.error);
+        alert("업로드 기록 실패: " + resp.error);
       }
     } catch (e: any) {
-      alert("업로드 에러 (네트워크): " + e.message);
+      alert("파일 전송 실패: " + e.message);
     } finally {
       setIsLoading(false);
     }
@@ -211,23 +209,27 @@ export default function GroundCheckApp() {
     if (!title) return;
 
     setIsLoading(true);
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const resp = await uploadRegistry(title, event.target?.result as string, currentUser.id);
-        if (resp.success) {
+    
+    try {
+       // 1. Upload large document securely directly from browser to S3 / Blob
+       const blob = await upload(file.name, file, {
+         access: 'public',
+         handleUploadUrl: '/api/upload',
+       });
+
+       // 2. Save only the external access URL into database
+       const resp = await uploadRegistry(title, blob.url, currentUser.id);
+       if (resp.success) {
           await refreshData();
-          showToast('대장이 등록되었습니다.');
-        } else {
-          alert("등록 실패: " + resp.error);
-        }
-      } catch (e: any) {
-        alert("대장 등록 에러 (네트워크): " + e.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    reader.readAsDataURL(file);
+          showToast('대장이 성공적으로 등록되었습니다.');
+       } else {
+          alert("대장 기록 실패: " + resp.error);
+       }
+    } catch (e: any) {
+      alert("대장 파일 업로드 에러: " + e.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleExempt = async (tId: string, pId: string, currentStatus: string) => {
@@ -369,13 +371,11 @@ export default function GroundCheckApp() {
                         <button className="photo-btn" onClick={async () => {
                           try {
                             setIsLoading(true);
-                            const data = await getRegistryData(reg.id);
-                            if (data) {
-                              const link = document.createElement('a');
-                              link.href = data;
-                              link.download = reg.title;
-                              link.click();
-                            }
+                            // It's already a URL now
+                            const link = document.createElement('a');
+                            link.href = await getRegistryData(reg.id) || ''; // Fallback for old records
+                            link.download = reg.title;
+                            link.click();
                           } catch (e: any) {
                             alert("다운로드 실패: " + e.message);
                           } finally {
@@ -468,11 +468,11 @@ export default function GroundCheckApp() {
           <div className="modal-content glass-card" style={{ maxWidth: 400, margin: 'auto' }}>
              <div className="modal-header"><h2>사진 업로드</h2></div>
              <div className="upload-body">
-                <input type="file" accept="image/*" onChange={handleCompress} disabled={isLoading} />
-                {pendingPhotoData && <img src={pendingPhotoData} style={{ maxWidth: '100%', marginTop: 10 }} />}
+                <input type="file" accept="image/*" onChange={handleFileSelect} disabled={isLoading} />
+                {pendingPhotoPreview && <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />}
                 <div className="upload-actions" style={{ marginTop: 20 }}>
-                   <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoData(null); }} disabled={isLoading}>취소</button>
-                   <button className="btn-upload" onClick={handlePhotoUpload} disabled={!pendingPhotoData || isLoading}>
+                   <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoPreview(null); setPendingPhotoFile(null); }} disabled={isLoading}>취소</button>
+                   <button className="btn-upload" onClick={handlePhotoUpload} disabled={!pendingPhotoFile || isLoading}>
                      {isLoading ? "업로드 중..." : "업로드"}
                    </button>
                 </div>
