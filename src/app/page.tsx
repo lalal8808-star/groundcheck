@@ -387,17 +387,33 @@ export default function GroundCheckApp() {
                         <button className="photo-btn" onClick={async () => {
                           try {
                             setIsLoading(true);
-                            // It's already a URL now
-                            const link = document.createElement('a');
-                            link.href = await getRegistryData(reg.id) || ''; // Fallback for old records
-                            link.download = reg.title;
-                            link.click();
+                            const dataUrl = await getRegistryData(reg.id);
+                            if (!dataUrl) {
+                               alert("데이터가 없습니다.");
+                               return;
+                            }
+                            
+                            const response = await fetch(dataUrl);
+                            const blob = await response.blob();
+                            const blobUrl = URL.createObjectURL(blob);
+                            
+                            const newTab = window.open(blobUrl, '_blank');
+                            if (!newTab) {
+                               const link = document.createElement('a');
+                               link.href = blobUrl;
+                               link.download = reg.title;
+                               document.body.appendChild(link);
+                               link.click();
+                               document.body.removeChild(link);
+                            }
+                            
+                            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
                           } catch (e: any) {
-                            alert("다운로드 실패: " + e.message);
+                            alert("열기 실패: " + e.message);
                           } finally {
                             setIsLoading(false);
                           }
-                        }} style={{fontSize:'0.75rem'}}>다운로드</button>
+                        }} style={{fontSize:'0.75rem'}}>열기</button>
                         <button className="photo-btn danger" onClick={async () => { if(confirm('삭제하시겠습니까?')) { try{ await deleteRegistry(reg.id); refreshData(); } catch(e:any) { alert("오류: "+e.message) } } }} style={{padding:'4px 8px'}}>🗑️</button>
                       </div>
                     </div>
