@@ -223,33 +223,56 @@ export default function GroundCheckApp() {
     setIsLoading(true);
     setUploadMessage('파일 전송 중...');
     
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-       const fileData = event.target?.result as string;
-       if (fileData.length > 4500000) {
-          alert("파일 용량이 너무 큽니다. (약 3MB 한도 초과)");
-          setIsLoading(false);
-          if (e.target) e.target.value = '';
-          return;
-       }
-       
-       try {
-         const resp = await uploadRegistry(title, fileData, currentUser.id);
-         if (resp.success) {
-            await refreshData();
-            showToast('대장이 성공적으로 등록되었습니다.');
-         } else {
-            alert("대장 기록 실패: " + resp.error);
-         }
-       } catch (err: any) {
-         alert("대장 파일 업로드 에러: " + err.message);
-       } finally {
-         setIsLoading(false);
-         if (e.target) e.target.value = '';
-       }
+    const isImage = file.type.startsWith('image/');
+
+    const processAndUpload = async (fileData: string) => {
+      if (fileData.length > 2500000) {
+        alert('파일이 너무 큽니다. 이미지는 자동 압축되며, 기타 파일은 2MB 이하로 올려주세요.');
+        setIsLoading(false);
+        if (e.target) e.target.value = '';
+        return;
+      }
+      try {
+        const resp = await uploadRegistry(title, fileData, currentUser.id);
+        if (resp.success) {
+           await refreshData();
+           showToast('대장이 성공적으로 등록되었습니다.');
+        } else {
+           alert('대장 기록 실패: ' + resp.error);
+        }
+      } catch (err: any) {
+        alert('대장 파일 업로드 에러: ' + err.message);
+      } finally {
+        setIsLoading(false);
+        if (e.target) e.target.value = '';
+      }
     };
-    reader.readAsDataURL(file);
+
+    if (isImage) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const MAX_DIM = 1200;
+          let { width, height } = img;
+          if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
+          else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
+          processAndUpload(canvas.toDataURL('image/jpeg', 0.7));
+        };
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => processAndUpload(event.target?.result as string);
+      reader.readAsDataURL(file);
+    }
   };
+
 
   const toggleExempt = async (tId: string, pId: string, currentStatus: string) => {
     if (!currentUser) return setShowAuthModal(true);
