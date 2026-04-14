@@ -250,6 +250,7 @@ export default function GroundCheckApp() {
       alert("대장 파일 업로드 에러: " + e.message);
     } finally {
       setIsLoading(false);
+      if (e.target) e.target.value = ''; // Reset input
     }
   };
 
@@ -379,7 +380,7 @@ export default function GroundCheckApp() {
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>📂 접지관리대장</h3>
                   <button className="photo-btn primary" onClick={() => document.getElementById('reg-in')?.click()} disabled={isLoading}>파일 업로드</button>
-                  <input id="reg-in" type="file" onChange={handleRegistryUpload} style={{ display: 'none' }} />
+                  <input id="reg-in" type="file" onClick={(e) => { (e.target as any).value = '' }} onChange={handleRegistryUpload} style={{ display: 'none' }} />
                </div>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {registries.map(reg => (
@@ -489,7 +490,7 @@ export default function GroundCheckApp() {
           <div className="modal-content glass-card" style={{ maxWidth: 400, margin: 'auto' }}>
              <div className="modal-header"><h2>사진 업로드</h2></div>
              <div className="upload-body">
-                <input type="file" accept="image/*" onChange={handleFileSelect} disabled={isLoading} />
+                <input type="file" accept="image/*" onClick={(e) => { (e.target as any).value = '' }} onChange={handleFileSelect} disabled={isLoading} />
                 {pendingPhotoPreview && <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />}
                 <div className="upload-actions" style={{ marginTop: 20 }}>
                    <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoPreview(null); setPendingPhotoFile(null); }} disabled={isLoading}>취소</button>
