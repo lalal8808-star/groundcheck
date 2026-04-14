@@ -1,0 +1,21 @@
+{
+  "name": "접지관리 시스템",
+  "short_name": "접지관리",
+  "description": "가공송전선로 접지관리 시스템 (154kV 이천-가남 T/L)",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
