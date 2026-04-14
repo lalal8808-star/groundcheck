@@ -180,19 +180,23 @@ export default function GroundCheckApp() {
 
     setIsLoading(true);
     try {
-      await uploadGrounding({
+      const resp = await uploadGrounding({
         towerId: selectedTowerId,
         pointId: selectedPointId,
         status: uploadType === 'install' ? 'grounding' : 'removed',
         photoData: pendingPhotoData,
         userId: currentUser.id
       });
-      setPendingPhotoData(null);
-      setSelectedPointId(null);
-      await refreshData();
-      showToast('업로드가 완료되었습니다.');
+      if (resp.success) {
+        setPendingPhotoData(null);
+        setSelectedPointId(null);
+        await refreshData();
+        showToast('업로드가 완료되었습니다.');
+      } else {
+        alert("업로드 실패: " + resp.error);
+      }
     } catch (e: any) {
-      alert("업로드 에러: " + e.message);
+      alert("업로드 에러 (네트워크): " + e.message);
     } finally {
       setIsLoading(false);
     }
@@ -210,11 +214,15 @@ export default function GroundCheckApp() {
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        await uploadRegistry(title, event.target?.result as string, currentUser.id);
-        await refreshData();
-        showToast('대장이 등록되었습니다.');
+        const resp = await uploadRegistry(title, event.target?.result as string, currentUser.id);
+        if (resp.success) {
+          await refreshData();
+          showToast('대장이 등록되었습니다.');
+        } else {
+          alert("등록 실패: " + resp.error);
+        }
       } catch (e: any) {
-        alert("대장 등록 실패: " + e.message);
+        alert("대장 등록 에러 (네트워크): " + e.message);
       } finally {
         setIsLoading(false);
       }
@@ -228,10 +236,14 @@ export default function GroundCheckApp() {
     
     setIsLoading(true);
     try {
-      await togglePointExempt(tId, pId, currentUser.id, currentStatus !== 'exempt');
-      await refreshData();
+      const resp = await togglePointExempt(tId, pId, currentUser.id, currentStatus !== 'exempt');
+      if (resp.success) {
+        await refreshData();
+      } else {
+        alert("실패: " + resp.error);
+      }
     } catch (e: any) {
-      alert("전환 실패: " + e.message);
+      alert("전환 에러: " + e.message);
     } finally {
       setIsLoading(false);
     }
@@ -353,9 +365,24 @@ export default function GroundCheckApp() {
                         <div style={{ fontWeight: 600 }}>{reg.title}</div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{reg.user_name} | {new Date(reg.created_at).toLocaleDateString()}</div>
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="photo-btn" onClick={() => { const l = document.createElement('a'); l.href = reg.file_data; l.download = reg.title; l.click(); }}>⬇️</button>
-                        <button className="photo-btn danger" onClick={async () => { if(confirm('삭제?')){ await deleteRegistry(reg.id); refreshData(); } }}>🗑️</button>
+                      <div style={{display:'flex', gap:'0.5rem'}}>
+                        <button className="photo-btn" onClick={async () => {
+                          try {
+                            setIsLoading(true);
+                            const data = await getRegistryData(reg.id);
+                            if (data) {
+                              const link = document.createElement('a');
+                              link.href = data;
+                              link.download = reg.title;
+                              link.click();
+                            }
+                          } catch (e: any) {
+                            alert("다운로드 실패: " + e.message);
+                          } finally {
+                            setIsLoading(false);
+                          }
+                        }} style={{fontSize:'0.75rem'}}>다운로드</button>
+                        <button className="photo-btn danger" onClick={async () => { if(confirm('삭제하시겠습니까?')) { try{ await deleteRegistry(reg.id); refreshData(); } catch(e:any) { alert("오류: "+e.message) } } }} style={{padding:'4px 8px'}}>🗑️</button>
                       </div>
                     </div>
                   ))}
