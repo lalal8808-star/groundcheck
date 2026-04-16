@@ -367,123 +367,33 @@ export default function GroundCheckApp() {
   const progressPct = totalPoints ? Math.round((stats.removed / totalPoints) * 100) : 0;
 
   // ── File handlers ──────────────────────────────────────────────
-  // 헬퍼: Blob → base64 DataURL via ArrayBuffer (청크 처리로 메모리 안전)
-  const blobToDataUrlViaArrayBuffer = async (blob: Blob): Promise<string> => {
-    const buf = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    const chunks: string[] = [];
-    const CHUNK = 8192;
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-      chunks.push(String.fromCharCode(...(Array.from(bytes.subarray(i, Math.min(i + CHUNK, bytes.length))))));
-    }
-    const mime = blob.type || 'image/jpeg';
-    return `data:${mime};base64,${btoa(chunks.join(''))}`;
-  };
-
-  // 헬퍼: Blob → FileReader base64 DataURL
-  const blobToDataUrlViaFileReader = (blob: Blob): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('FileReader error'));
-      reader.onload = (ev) => {
-        const result = ev.target?.result as string;
-        result ? resolve(result) : reject(new Error('FileReader empty'));
-      };
-      reader.readAsDataURL(blob);
-    });
-
-  // 헬퍼: Blob → canvas 압축 → JPEG DataURL
-  const compressToJpeg = (blob: Blob): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const objectUrl = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const MAX_DIM = 1000;
-          let { width, height } = img;
-          if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
-          else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
-          const canvas = document.createElement('canvas');
-          canvas.width = width; canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
-          resolve(canvas.toDataURL('image/jpeg', 0.6));
-        } catch (e) { reject(e); } finally { URL.revokeObjectURL(objectUrl); }
-      };
-      img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Image decode failed')); };
-      img.src = objectUrl;
-    });
-
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // ★ iOS WebKit: input이 disabled 되면 File 참조가 무효화될 수 있음
-    // → setIsLoading(true) 이전에 먼저 파일 데이터를 읽어놓는다
-    let rawDataUrl: string | null = null;
-    try {
-      rawDataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(reader.error);
-        reader.onload = ev => { const r = ev.target?.result as string; r ? resolve(r) : reject(new Error('empty')); };
-        reader.readAsDataURL(file);
-      });
-    } catch {
-      // FileReader 실패 시 ArrayBuffer로 대체
-      try {
-        const buf = await file.arrayBuffer();
-        const bytes = new Uint8Array(buf);
-        const chunks: string[] = [];
-        const CHUNK = 8192;
-        for (let i = 0; i < bytes.length; i += CHUNK)
-          chunks.push(String.fromCharCode(...Array.from(bytes.subarray(i, Math.min(i + CHUNK, bytes.length)))));
-        rawDataUrl = `data:${file.type || 'image/jpeg'};base64,${btoa(chunks.join(''))}`;
-      } catch { /* 완전 실패 */ }
-    }
-
-    if (!rawDataUrl) {
-      alert('파일을 읽을 수 없습니다. 다른 사진을 선택해주세요.');
-      if (e.target) e.target.value = '';
-      return;
-    }
-
-    // 파일 읽기 완료 → 이제 UI 상태 변경
     setIsLoading(true);
-    setUploadMessage('이미지 처리 중...');
-    let preview: string | null = null;
-
+    setUploadMessage('이미지 서버 전송 중...');
     try {
-      const heic = await isHeicFile(file);
-
-      if (heic) {
-        setUploadMessage('HEIF 변환 중... (잠시 기다려주세요)');
-        try {
-          const mod = await import('heic2any');
-          const heic2any = (mod as any).default || mod;
-          const converted = await (heic2any as Function)({ blob: file, toType: 'image/jpeg', quality: 0.8 });
-          const jpegBlob = (Array.isArray(converted) ? converted[0] : converted) as Blob;
-          preview = await compressToJpeg(jpegBlob);
-        } catch (e1) {
-          console.warn('[HEIC] heic2any 실패:', e1);
-          // heic2any 실패 시 rawDataUrl 사용 (미리보기는 안 되지만 업로드는 가능)
-        }
-      } else {
-        try {
-          preview = await compressToJpeg(file);
-        } catch (e1) {
-          console.warn('[IMG] canvas 압축 실패:', e1);
-        }
+      // 서버에서 HEIC→JPEG 변환 + 리사이즈 (클라이언트 HEIC 읽기 문제 완전 우회)
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch('/api/process-image', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || '서버 처리 실패');
       }
+      const { dataUrl } = await res.json();
+      setPendingPhotoPreview(dataUrl);
     } catch (err: any) {
-      console.error('handleFileSelect error:', err);
+      console.error('[handleFileSelect]', err);
+      alert('이미지 처리 실패: ' + (err?.message || '알 수 없는 오류'));
+      if (e.target) e.target.value = '';
+    } finally {
+      setIsLoading(false);
+      setUploadMessage('');
     }
-
-    // JPEG 미리보기 있으면 그것 사용, 없으면 rawDataUrl (HEIC 원본) 사용
-    // → rawDataUrl이 있으므로 업로드 버튼은 항상 활성화됨
-    setPendingPhotoPreview(preview || rawDataUrl);
-    setIsLoading(false);
-    setUploadMessage('');
   };
+
 
   const handlePhotoUpload = async () => {
     if (!currentUser || !currentProject) return setShowAuthModal(true);
