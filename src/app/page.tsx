@@ -367,13 +367,17 @@ export default function GroundCheckApp() {
   const progressPct = totalPoints ? Math.round((stats.removed / totalPoints) * 100) : 0;
 
   // ── File handlers ──────────────────────────────────────────────
-  // 헬퍼: Blob → base64 DataURL (FileReader 없이 ArrayBuffer 사용)
+  // 헬퍼: Blob → base64 DataURL via ArrayBuffer (청크 처리로 메모리 안전)
   const blobToDataUrlViaArrayBuffer = async (blob: Blob): Promise<string> => {
     const buf = await blob.arrayBuffer();
     const bytes = new Uint8Array(buf);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return `data:${blob.type || 'image/jpeg'};base64,${btoa(binary)}`;
+    const chunks: string[] = [];
+    const CHUNK = 8192;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      chunks.push(String.fromCharCode(...(Array.from(bytes.subarray(i, Math.min(i + CHUNK, bytes.length))))));
+    }
+    const mime = blob.type || 'image/jpeg';
+    return `data:${mime};base64,${btoa(chunks.join(''))}`;
   };
 
   // 헬퍼: Blob → FileReader base64 DataURL
@@ -413,6 +417,37 @@ export default function GroundCheckApp() {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // ★ iOS WebKit: input이 disabled 되면 File 참조가 무효화될 수 있음
+    // → setIsLoading(true) 이전에 먼저 파일 데이터를 읽어놓는다
+    let rawDataUrl: string | null = null;
+    try {
+      rawDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error);
+        reader.onload = ev => { const r = ev.target?.result as string; r ? resolve(r) : reject(new Error('empty')); };
+        reader.readAsDataURL(file);
+      });
+    } catch {
+      // FileReader 실패 시 ArrayBuffer로 대체
+      try {
+        const buf = await file.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        const chunks: string[] = [];
+        const CHUNK = 8192;
+        for (let i = 0; i < bytes.length; i += CHUNK)
+          chunks.push(String.fromCharCode(...Array.from(bytes.subarray(i, Math.min(i + CHUNK, bytes.length)))));
+        rawDataUrl = `data:${file.type || 'image/jpeg'};base64,${btoa(chunks.join(''))}`;
+      } catch { /* 완전 실패 */ }
+    }
+
+    if (!rawDataUrl) {
+      alert('파일을 읽을 수 없습니다. 다른 사진을 선택해주세요.');
+      if (e.target) e.target.value = '';
+      return;
+    }
+
+    // 파일 읽기 완료 → 이제 UI 상태 변경
     setIsLoading(true);
     setUploadMessage('이미지 처리 중...');
     let preview: string | null = null;
@@ -421,75 +456,31 @@ export default function GroundCheckApp() {
       const heic = await isHeicFile(file);
 
       if (heic) {
-        // ── 전략 1: heic2any → JPEG 변환 후 canvas 압축 ──
+        setUploadMessage('HEIF 변환 중... (잠시 기다려주세요)');
         try {
-          setUploadMessage('HEIF 변환 중... (잠시 기다려주세요)');
-          const heic2any = (await import('heic2any')).default;
-          const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+          const mod = await import('heic2any');
+          const heic2any = (mod as any).default || mod;
+          const converted = await (heic2any as Function)({ blob: file, toType: 'image/jpeg', quality: 0.8 });
           const jpegBlob = (Array.isArray(converted) ? converted[0] : converted) as Blob;
           preview = await compressToJpeg(jpegBlob);
         } catch (e1) {
-          console.warn('[HEIC] heic2any+canvas 실패, 직접 읽기 시도:', e1);
+          console.warn('[HEIC] heic2any 실패:', e1);
+          // heic2any 실패 시 rawDataUrl 사용 (미리보기는 안 되지만 업로드는 가능)
         }
-
-        // ── 전략 2: heic2any → JPEG → FileReader DataURL ──
-        if (!preview) {
-          try {
-            const heic2any = (await import('heic2any')).default;
-            const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
-            const jpegBlob = (Array.isArray(converted) ? converted[0] : converted) as Blob;
-            preview = await blobToDataUrlViaFileReader(jpegBlob);
-          } catch (e2) {
-            console.warn('[HEIC] heic2any+FileReader 실패, ArrayBuffer 시도:', e2);
-          }
-        }
-
-        // ── 전략 3: heic2any → JPEG → ArrayBuffer 직접 인코딩 ──
-        if (!preview) {
-          try {
-            const heic2any = (await import('heic2any')).default;
-            const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
-            const jpegBlob = (Array.isArray(converted) ? converted[0] : converted) as Blob;
-            preview = await blobToDataUrlViaArrayBuffer(jpegBlob);
-          } catch (e3) {
-            console.warn('[HEIC] 모든 변환 시도 실패:', e3);
-          }
-        }
-
-        // ── 최후 수단: 원본 파일 그대로 읽기 (미리보기 없이 업로드 가능하게) ──
-        if (!preview) {
-          try {
-            preview = await blobToDataUrlViaArrayBuffer(file);
-          } catch (e4) {
-            console.error('[HEIC] 원본 읽기도 실패:', e4);
-          }
-        }
-
       } else {
-        // ── 일반 이미지: canvas 압축 시도 ──
         try {
           preview = await compressToJpeg(file);
         } catch (e1) {
-          console.warn('[IMG] canvas 압축 실패, FileReader 시도:', e1);
-          try {
-            preview = await blobToDataUrlViaFileReader(file);
-          } catch (e2) {
-            console.warn('[IMG] FileReader 실패, ArrayBuffer 시도:', e2);
-            preview = await blobToDataUrlViaArrayBuffer(file);
-          }
+          console.warn('[IMG] canvas 압축 실패:', e1);
         }
       }
-
     } catch (err: any) {
       console.error('handleFileSelect error:', err);
     }
 
-    if (preview) {
-      setPendingPhotoPreview(preview);
-    } else {
-      alert('이미지를 불러올 수 없습니다.\niPhone이라면 카메라 설정 → 포맷 → "가장 호환성 높은"으로 변경해 주세요.');
-      if (e.target) e.target.value = '';
-    }
+    // JPEG 미리보기 있으면 그것 사용, 없으면 rawDataUrl (HEIC 원본) 사용
+    // → rawDataUrl이 있으므로 업로드 버튼은 항상 활성화됨
+    setPendingPhotoPreview(preview || rawDataUrl);
     setIsLoading(false);
     setUploadMessage('');
   };
@@ -1208,8 +1199,13 @@ export default function GroundCheckApp() {
           <div className="modal-content glass-card" style={{ maxWidth: 400, margin: 'auto' }}>
             <div className="modal-header"><h2>사진 업로드</h2></div>
             <div className="upload-body">
-              <input type="file" accept="image/*" onClick={(e) => { (e.target as any).value = ''; }} onChange={handleFileSelect} disabled={isLoading} />
-              {pendingPhotoPreview && <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />}
+              {/* disabled 제거: iOS WebKit에서 disabled 시 File 참조가 무효화됨 */}
+              <input type="file" accept="image/*" onClick={(e) => { (e.target as any).value = ''; }} onChange={handleFileSelect} />
+              {pendingPhotoPreview && (
+                pendingPhotoPreview.includes('image/heic') || pendingPhotoPreview.includes('image/heif')
+                  ? <div style={{ marginTop: 10, padding: '1rem', background: '#f1f5f9', borderRadius: 8, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>📷 HEIF 사진이 선택되었습니다<br/><small style={{ fontSize: '0.75rem' }}>미리보기 미지원 (업로드는 정상 진행됩니다)</small></div>
+                  : <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />
+              )}
               <div className="upload-actions" style={{ marginTop: 20 }}>
                 <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoPreview(null); setUploadTowerId(null); }} disabled={isLoading}>취소</button>
                 <button className="btn-upload" onClick={handlePhotoUpload} disabled={!pendingPhotoPreview || isLoading}>
