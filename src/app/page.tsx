@@ -367,8 +367,30 @@ export default function GroundCheckApp() {
   const progressPct = totalPoints ? Math.round((stats.removed / totalPoints) * 100) : 0;
 
   // ── File handlers ──────────────────────────────────────────────
-  const processImageFile = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
+  // 헬퍼: Blob → base64 DataURL (FileReader 없이 ArrayBuffer 사용)
+  const blobToDataUrlViaArrayBuffer = async (blob: Blob): Promise<string> => {
+    const buf = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return `data:${blob.type || 'image/jpeg'};base64,${btoa(binary)}`;
+  };
+
+  // 헬퍼: Blob → FileReader base64 DataURL
+  const blobToDataUrlViaFileReader = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('FileReader error'));
+      reader.onload = (ev) => {
+        const result = ev.target?.result as string;
+        result ? resolve(result) : reject(new Error('FileReader empty'));
+      };
+      reader.readAsDataURL(blob);
+    });
+
+  // 헬퍼: Blob → canvas 압축 → JPEG DataURL
+  const compressToJpeg = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
       const objectUrl = URL.createObjectURL(blob);
       const img = new Image();
       img.onload = () => {
@@ -382,56 +404,94 @@ export default function GroundCheckApp() {
           const ctx = canvas.getContext('2d');
           if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
           resolve(canvas.toDataURL('image/jpeg', 0.6));
-        } catch (e) {
-          reject(e);
-        } finally {
-          URL.revokeObjectURL(objectUrl);
-        }
+        } catch (e) { reject(e); } finally { URL.revokeObjectURL(objectUrl); }
       };
-      img.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        // createObjectURL 실패 시 FileReader fallback
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error('이미지를 읽을 수 없습니다'));
-        reader.onload = (ev) => {
-          const dataUrl = ev.target?.result as string;
-          if (dataUrl) resolve(dataUrl);
-          else reject(new Error('이미지 읽기 결과 없음'));
-        };
-        reader.readAsDataURL(blob);
-      };
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Image decode failed')); };
       img.src = objectUrl;
     });
-  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsLoading(true);
     setUploadMessage('이미지 처리 중...');
+    let preview: string | null = null;
+
     try {
       const heic = await isHeicFile(file);
+
       if (heic) {
-        // HEIC/HEIF → JPEG 자동 변환
-        setUploadMessage('HEIF 이미지 변환 중...');
-        const heic2any = (await import('heic2any')).default;
-        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 }) as Blob;
-        const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
-        const dataUrl = await processImageFile(jpegBlob);
-        setPendingPhotoPreview(dataUrl);
+        // ── 전략 1: heic2any → JPEG 변환 후 canvas 압축 ──
+        try {
+          setUploadMessage('HEIF 변환 중... (잠시 기다려주세요)');
+          const heic2any = (await import('heic2any')).default;
+          const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+          const jpegBlob = (Array.isArray(converted) ? converted[0] : converted) as Blob;
+          preview = await compressToJpeg(jpegBlob);
+        } catch (e1) {
+          console.warn('[HEIC] heic2any+canvas 실패, 직접 읽기 시도:', e1);
+        }
+
+        // ── 전략 2: heic2any → JPEG → FileReader DataURL ──
+        if (!preview) {
+          try {
+            const heic2any = (await import('heic2any')).default;
+            const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+            const jpegBlob = (Array.isArray(converted) ? converted[0] : converted) as Blob;
+            preview = await blobToDataUrlViaFileReader(jpegBlob);
+          } catch (e2) {
+            console.warn('[HEIC] heic2any+FileReader 실패, ArrayBuffer 시도:', e2);
+          }
+        }
+
+        // ── 전략 3: heic2any → JPEG → ArrayBuffer 직접 인코딩 ──
+        if (!preview) {
+          try {
+            const heic2any = (await import('heic2any')).default;
+            const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+            const jpegBlob = (Array.isArray(converted) ? converted[0] : converted) as Blob;
+            preview = await blobToDataUrlViaArrayBuffer(jpegBlob);
+          } catch (e3) {
+            console.warn('[HEIC] 모든 변환 시도 실패:', e3);
+          }
+        }
+
+        // ── 최후 수단: 원본 파일 그대로 읽기 (미리보기 없이 업로드 가능하게) ──
+        if (!preview) {
+          try {
+            preview = await blobToDataUrlViaArrayBuffer(file);
+          } catch (e4) {
+            console.error('[HEIC] 원본 읽기도 실패:', e4);
+          }
+        }
+
       } else {
-        const dataUrl = await processImageFile(file);
-        setPendingPhotoPreview(dataUrl);
+        // ── 일반 이미지: canvas 압축 시도 ──
+        try {
+          preview = await compressToJpeg(file);
+        } catch (e1) {
+          console.warn('[IMG] canvas 압축 실패, FileReader 시도:', e1);
+          try {
+            preview = await blobToDataUrlViaFileReader(file);
+          } catch (e2) {
+            console.warn('[IMG] FileReader 실패, ArrayBuffer 시도:', e2);
+            preview = await blobToDataUrlViaArrayBuffer(file);
+          }
+        }
       }
+
     } catch (err: any) {
-      console.error('Image processing error:', err);
-      alert('이미지 처리 중 오류가 발생했습니다.\n' + (err?.message || ''));
-      if (e.target) e.target.value = '';
-    } finally {
-      setIsLoading(false);
-      setUploadMessage('');
+      console.error('handleFileSelect error:', err);
     }
+
+    if (preview) {
+      setPendingPhotoPreview(preview);
+    } else {
+      alert('이미지를 불러올 수 없습니다.\niPhone이라면 카메라 설정 → 포맷 → "가장 호환성 높은"으로 변경해 주세요.');
+      if (e.target) e.target.value = '';
+    }
+    setIsLoading(false);
+    setUploadMessage('');
   };
 
   const handlePhotoUpload = async () => {

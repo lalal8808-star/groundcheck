@@ -1,4 +1,4 @@
-const CACHE_NAME = 'groundcheck-v2';
+const CACHE_NAME = 'groundcheck-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
