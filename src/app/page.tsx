@@ -369,15 +369,10 @@ export default function GroundCheckApp() {
   // ── File handlers ──────────────────────────────────────────────
   const processImageFile = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('파일 읽기 실패'));
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        if (!dataUrl) { reject(new Error('파일 읽기 결과 없음')); return; }
-        const img = new Image();
-        img.src = dataUrl;
-        img.onerror = () => resolve(dataUrl); // 디코딩 실패 시 raw dataUrl 사용
-        img.onload = () => {
+      const objectUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        try {
           const MAX_DIM = 1000;
           let { width, height } = img;
           if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
@@ -387,9 +382,25 @@ export default function GroundCheckApp() {
           const ctx = canvas.getContext('2d');
           if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
           resolve(canvas.toDataURL('image/jpeg', 0.6));
-        };
+        } catch (e) {
+          reject(e);
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
       };
-      reader.readAsDataURL(blob);
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        // createObjectURL 실패 시 FileReader fallback
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('이미지를 읽을 수 없습니다'));
+        reader.onload = (ev) => {
+          const dataUrl = ev.target?.result as string;
+          if (dataUrl) resolve(dataUrl);
+          else reject(new Error('이미지 읽기 결과 없음'));
+        };
+        reader.readAsDataURL(blob);
+      };
+      img.src = objectUrl;
     });
   };
 
