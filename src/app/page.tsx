@@ -367,23 +367,55 @@ export default function GroundCheckApp() {
   const progressPct = totalPoints ? Math.round((stats.removed / totalPoints) * 100) : 0;
 
   // ── File handlers ──────────────────────────────────────────────
+  const processImageFile = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const MAX_DIM = 1000;
+          let { width, height } = img;
+          if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
+          else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
+        } catch (e) {
+          reject(e);
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('이미지를 디코딩할 수 없습니다'));
+      };
+      img.src = objectUrl;
+    });
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsLoading(true);
-    setUploadMessage('이미지 서버 전송 중...');
+    setUploadMessage('이미지 처리 중...');
+
     try {
-      // 서버에서 HEIC→JPEG 변환 + 리사이즈 (클라이언트 HEIC 읽기 문제 완전 우회)
-      const formData = new FormData();
-      formData.append('image', file);
-      const res = await fetch('/api/process-image', { method: 'POST', body: formData });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || '서버 처리 실패');
+      const isHeic = await isHeicFile(file);
+      if (isHeic) {
+        alert('HEIF 형식은 지원되지 않습니다.\n카메라 앱이나 갤러리에서 사진을 선택하실 때 일반 JPEG 옵션을 사용하시거나, 설정 > 카메라 > 포맷에서 "가장 호환성 높은"으로 변경해주세요.');
+        setIsLoading(false);
+        setUploadMessage('');
+        if (e.target) e.target.value = '';
+        return;
       }
-      const { dataUrl } = await res.json();
+
+      const dataUrl = await processImageFile(file);
       setPendingPhotoPreview(dataUrl);
+
     } catch (err: any) {
       console.error('[handleFileSelect]', err);
       alert('이미지 처리 실패: ' + (err?.message || '알 수 없는 오류'));
@@ -1110,12 +1142,8 @@ export default function GroundCheckApp() {
             <div className="modal-header"><h2>사진 업로드</h2></div>
             <div className="upload-body">
               {/* disabled 제거: iOS WebKit에서 disabled 시 File 참조가 무효화됨 */}
-              <input type="file" accept="image/*" onClick={(e) => { (e.target as any).value = ''; }} onChange={handleFileSelect} />
-              {pendingPhotoPreview && (
-                pendingPhotoPreview.includes('image/heic') || pendingPhotoPreview.includes('image/heif')
-                  ? <div style={{ marginTop: 10, padding: '1rem', background: '#f1f5f9', borderRadius: 8, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>📷 HEIF 사진이 선택되었습니다<br/><small style={{ fontSize: '0.75rem' }}>미리보기 미지원 (업로드는 정상 진행됩니다)</small></div>
-                  : <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />
-              )}
+              <input type="file" accept="image/jpeg, image/png, image/webp" onClick={(e) => { (e.target as any).value = ''; }} onChange={handleFileSelect} />
+              {pendingPhotoPreview && <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />}
               <div className="upload-actions" style={{ marginTop: 20 }}>
                 <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoPreview(null); setUploadTowerId(null); }} disabled={isLoading}>취소</button>
                 <button className="btn-upload" onClick={handlePhotoUpload} disabled={!pendingPhotoPreview || isLoading}>
