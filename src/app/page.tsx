@@ -3,6 +3,29 @@
 import { useState, useEffect, useCallback } from 'react';
 import { loginToProject, createProject, getAdminProjects, deleteProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData, getProjectSettings, saveProjectSettings } from './actions';
 
+// HEIC/HEIF 여부를 파일 시그니처(magic bytes)로 감지
+async function isHeicFile(file: File): Promise<boolean> {
+  if (file.type === 'image/heic' || file.type === 'image/heif' ||
+    file.type === 'image/heic-sequence' || file.type === 'image/heif-sequence' ||
+    file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+    return true;
+  }
+  // type이 비어있거나 틀린 경우를 대비해 파일 앞부분 바이트 확인
+  try {
+    const buf = await file.slice(0, 12).arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    // ftyp box: offset 4~8 = 'ftyp'
+    const ftyp = String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
+    if (ftyp === 'ftyp') {
+      const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+      if (['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1', 'miaf', 'MiHE'].some(b => brand.startsWith(b))) {
+        return true;
+      }
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
 type AdminProject = {
   id: string;
   project_number: string;
@@ -344,50 +367,60 @@ export default function GroundCheckApp() {
   const progressPct = totalPoints ? Math.round((stats.removed / totalPoints) * 100) : 0;
 
   // ── File handlers ──────────────────────────────────────────────
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const processImageFile = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('파일 읽기 실패'));
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (!dataUrl) { reject(new Error('파일 읽기 결과 없음')); return; }
+        const img = new Image();
+        img.src = dataUrl;
+        img.onerror = () => resolve(dataUrl); // 디코딩 실패 시 raw dataUrl 사용
+        img.onload = () => {
+          const MAX_DIM = 1000;
+          let { width, height } = img;
+          if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
+          else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
+        };
+      };
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // HEIC/HEIF 파일은 브라우저에서 직접 디코딩 불가
-    const isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
-      file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif');
-    if (isHeic) {
-      alert('HEIC/HEIF 파일은 지원되지 않습니다.\n카메라 설정에서 "가장 호환성 높은" 형식(JPEG)으로 변경하거나 다른 파일을 선택해주세요.');
-      if (e.target) e.target.value = '';
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onerror = () => {
-      alert('파일을 읽는 중 오류가 발생했습니다. 다른 파일을 선택해주세요.');
-      if (e.target) e.target.value = '';
-    };
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (!dataUrl) {
-        alert('파일 읽기에 실패했습니다. 다른 파일을 선택해주세요.');
-        return;
-      }
-      const img = new Image();
-      img.src = dataUrl;
-      img.onerror = () => {
-        // 이미지 디코딩 실패 시 원본 데이터를 미리보기로 직접 사용 시도
-        console.warn('Image decode failed, using raw dataUrl as preview');
+    setIsLoading(true);
+    setUploadMessage('이미지 처리 중...');
+    try {
+      const heic = await isHeicFile(file);
+      if (heic) {
+        // HEIC/HEIF → JPEG 자동 변환
+        setUploadMessage('HEIF 이미지 변환 중...');
+        const heic2any = (await import('heic2any')).default;
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 }) as Blob;
+        const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
+        const dataUrl = await processImageFile(jpegBlob);
         setPendingPhotoPreview(dataUrl);
-      };
-      img.onload = () => {
-        const MAX_DIM = 1000;
-        let { width, height } = img;
-        if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
-        else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
-        setPendingPhotoPreview(canvas.toDataURL('image/jpeg', 0.6));
-      };
-    };
+      } else {
+        const dataUrl = await processImageFile(file);
+        setPendingPhotoPreview(dataUrl);
+      }
+    } catch (err: any) {
+      console.error('Image processing error:', err);
+      alert('이미지 처리 중 오류가 발생했습니다.\n' + (err?.message || ''));
+      if (e.target) e.target.value = '';
+    } finally {
+      setIsLoading(false);
+      setUploadMessage('');
+    }
   };
 
   const handlePhotoUpload = async () => {
