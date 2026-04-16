@@ -3,119 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { loginToProject, createProject, getAdminProjects, deleteProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData, getProjectSettings, saveProjectSettings } from './actions';
 
-// HEIC/HEIF 여부를 파일 시그니처(magic bytes)로 감지
-async function isHeicFile(file: File): Promise<boolean> {
-  if (file.type === 'image/heic' || file.type === 'image/heif' ||
-    file.type === 'image/heic-sequence' || file.type === 'image/heif-sequence' ||
-    file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
-    return true;
-  }
-  // type이 비어있거나 틀린 경우를 대비해 파일 앞부분 바이트 확인
-  try {
-    const buf = await file.slice(0, 12).arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    // ftyp box: offset 4~8 = 'ftyp'
-    const ftyp = String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
-    if (ftyp === 'ftyp') {
-      const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
-      if (['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1', 'miaf', 'MiHE'].some(b => brand.startsWith(b))) {
-        return true;
-      }
-    }
-  } catch { /* ignore */ }
-  return false;
-}
+import { AdminProject, User, Project, HistoryItem, Point, Tower, Registry, TowerConfig } from '../lib/types';
 
-type AdminProject = {
-  id: string;
-  project_number: string;
-  project_name: string;
-  created_at: string;
-  deleted_at: string | null;
-};
 
-type User = {
-  id: string;
-  name: string;
-  affiliation: string;
-};
 
-type Project = {
-  id: string;
-  projectNumber: string;
-  projectName: string;
-  constructionSection: string;
-  lineName: string;
-  towerConfigs: TowerConfig[];
-};
-
-type HistoryItem = {
-  status: string;
-  timestamp: number;
-  photo: string;
-  userName?: string;
-  affiliation?: string;
-};
-
-type Point = {
-  id: string;
-  name: string;
-  circuit: number;
-  type: 'main' | 'sub';
-  status: 'none' | 'grounding' | 'removed' | 'exempt';
-  history: HistoryItem[];
-};
-
-type Tower = {
-  id: string;
-  number: string;
-  name: string;
-  points: Point[];
-};
-
-type Registry = {
-  id: string;
-  title: string;
-  file_data: string;
-  user_name: string;
-  created_at: string;
-};
-
-type TowerConfig = {
-  name: string;
-};
-
-function buildDefaultTowerConfigs(): TowerConfig[] {
-  const names: string[] = ['이천S/S'];
-  for (let i = 1; i <= 25; i++) names.push(`${i}호`);
-  return names.map(name => ({ name }));
-}
-
-function buildPoints(towerIdx: number, logs: any[]): Point[] {
-  const points: Point[] = [];
-  [1, 2].forEach(circuit => {
-    ['main', 'sub'].forEach(type => {
-      const ptId = `t${towerIdx}-c${circuit}-${type}`;
-      const ptLogs = logs.filter((l: any) => l.tower_id === `tower-${towerIdx}` && l.point_id === ptId);
-      const latest = ptLogs[0];
-      points.push({
-        id: ptId,
-        name: type === 'main' ? '주접지' : '보조접지',
-        circuit,
-        type: type as 'main' | 'sub',
-        status: latest ? latest.status : 'none',
-        history: ptLogs.map((l: any) => ({
-          status: l.status,
-          timestamp: new Date(l.created_at).getTime(),
-          photo: l.photo_data,
-          userName: l.user_name,
-          affiliation: l.affiliation,
-        })),
-      });
-    });
-  });
-  return points;
-}
+import { buildDefaultTowerConfigs, buildPoints } from '../lib/utils';
 
 const SESSION_KEY = 'groundcheck_session';
 
@@ -404,15 +296,6 @@ export default function GroundCheckApp() {
     setUploadMessage('이미지 처리 중...');
 
     try {
-      const isHeic = await isHeicFile(file);
-      if (isHeic) {
-        alert('HEIF 형식은 지원되지 않습니다.\n카메라 앱이나 갤러리에서 사진을 선택하실 때 일반 JPEG 옵션을 사용하시거나, 설정 > 카메라 > 포맷에서 "가장 호환성 높은"으로 변경해주세요.');
-        setIsLoading(false);
-        setUploadMessage('');
-        if (e.target) e.target.value = '';
-        return;
-      }
-
       const dataUrl = await processImageFile(file);
       setPendingPhotoPreview(dataUrl);
 
