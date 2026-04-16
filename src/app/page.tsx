@@ -388,23 +388,9 @@ export default function GroundCheckApp() {
           URL.revokeObjectURL(objectUrl);
         }
       };
-      img.onerror = async () => {
+      img.onerror = () => {
         URL.revokeObjectURL(objectUrl);
-        console.warn('Image decode failed, falling back to raw arrayBuffer mapping');
-        try {
-          const buf = await blob.arrayBuffer();
-          const bytes = new Uint8Array(buf);
-          const chunks: string[] = [];
-          for (let i = 0; i < bytes.length; i += 8192) {
-            chunks.push(String.fromCharCode(...Array.from(bytes.subarray(i, Math.min(i + 8192, bytes.length)))));
-          }
-          let mime = blob.type || 'image/jpeg';
-          // 만약 mime이 없거나 application/octet-stream 같은 것이면 jpeg로 강제 인식 유도
-          if (mime === 'application/octet-stream' || mime.includes('heic')) mime = 'image/jpeg';
-          resolve(`data:${mime};base64,${btoa(chunks.join(''))}`);
-        } catch (e) {
-          reject(new Error('이미지를 디코딩하거나 읽을 수 없습니다'));
-        }
+        reject(new Error('이미지를 디코딩할 수 없습니다. 형식을 지원하지 않거나 깨진 파일입니다.'));
       };
       img.src = objectUrl;
     });
@@ -1155,6 +1141,11 @@ export default function GroundCheckApp() {
           <div className="modal-content glass-card" style={{ maxWidth: 400, margin: 'auto' }}>
             <div className="modal-header"><h2>사진 업로드</h2></div>
             <div className="upload-body">
+              <div style={{ marginBottom: 15, padding: '0.8rem', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, fontSize: '0.85rem', color: '#b91c1c', lineHeight: 1.4 }}>
+                <strong>⚠️ 주의사항</strong><br/>
+                현재 <b>HEIF/HEIC 파일은 업로드할 수 없습니다.</b><br/>
+                아이폰 사용자이신 경우, 카메라 설정에서 포맷을 <b>"가장 호환성 높은"</b>으로 변경하시거나 <b>일반 JPEG 사진</b>만 올려주세요.
+              </div>
               {/* disabled 제거: iOS WebKit에서 disabled 시 File 참조가 무효화됨 */}
               <input type="file" accept="image/jpeg, image/png, image/webp" onClick={(e) => { (e.target as any).value = ''; }} onChange={handleFileSelect} />
               {pendingPhotoPreview && <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />}
