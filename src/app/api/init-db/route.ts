@@ -3,14 +3,38 @@ import { sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin0000';
+
+export async function GET(request: Request) {
+  // 관리자 토큰 검증 (쿼리 파라미터 또는 헤더)
+  const { searchParams } = new URL(request.url);
+  const token = searchParams.get('token') || request.headers.get('x-admin-token');
+  if (token !== ADMIN_PASSWORD) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
+    // Create Projects table
+    await sql`
+      CREATE TABLE IF NOT EXISTS projects (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_number TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        project_name TEXT NOT NULL DEFAULT '',
+        construction_section TEXT DEFAULT '',
+        line_name TEXT DEFAULT '',
+        tower_configs JSONB DEFAULT '[]'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     // Create Users table
     await sql`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
         affiliation TEXT NOT NULL,
+        project_id UUID REFERENCES projects(id),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -24,22 +48,30 @@ export async function GET() {
         status TEXT NOT NULL,
         photo_data TEXT,
         user_id UUID REFERENCES users(id),
+        project_id UUID REFERENCES projects(id),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
 
-    // Create Registries table (Grounding Register)
+    // Create Registries table
     await sql`
       CREATE TABLE IF NOT EXISTS registries (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         title TEXT NOT NULL,
         user_id UUID REFERENCES users(id),
-        file_data TEXT, 
+        project_id UUID REFERENCES projects(id),
+        file_data TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
 
-    return NextResponse.json({ message: 'Tables created successfully' });
+    // Migration: add columns to existing tables if missing
+    try { await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id)`; } catch {}
+    try { await sql`ALTER TABLE grounding_logs ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id)`; } catch {}
+    try { await sql`ALTER TABLE registries ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id)`; } catch {}
+    try { await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL`; } catch {}
+
+    return NextResponse.json({ message: 'Tables created/migrated successfully' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
