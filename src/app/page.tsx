@@ -388,9 +388,23 @@ export default function GroundCheckApp() {
           URL.revokeObjectURL(objectUrl);
         }
       };
-      img.onerror = () => {
+      img.onerror = async () => {
         URL.revokeObjectURL(objectUrl);
-        reject(new Error('이미지를 디코딩할 수 없습니다'));
+        console.warn('Image decode failed, falling back to raw arrayBuffer mapping');
+        try {
+          const buf = await blob.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          const chunks: string[] = [];
+          for (let i = 0; i < bytes.length; i += 8192) {
+            chunks.push(String.fromCharCode(...Array.from(bytes.subarray(i, Math.min(i + 8192, bytes.length)))));
+          }
+          let mime = blob.type || 'image/jpeg';
+          // 만약 mime이 없거나 application/octet-stream 같은 것이면 jpeg로 강제 인식 유도
+          if (mime === 'application/octet-stream' || mime.includes('heic')) mime = 'image/jpeg';
+          resolve(`data:${mime};base64,${btoa(chunks.join(''))}`);
+        } catch (e) {
+          reject(new Error('이미지를 디코딩하거나 읽을 수 없습니다'));
+        }
       };
       img.src = objectUrl;
     });
