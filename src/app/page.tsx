@@ -3,11 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { loginToProject, createProject, getAdminProjects, deleteProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData, getProjectSettings, saveProjectSettings } from './actions';
 
-import { AdminProject, User, Project, HistoryItem, Point, Tower, Registry, TowerConfig } from '../lib/types';
-
-
-
-import { buildDefaultTowerConfigs, buildPoints } from '../lib/utils';
+import { AdminProject, User, Project, HistoryItem, Point, Tower, Registry, TowerConfig, LineConfig } from '../lib/types';
+import { buildPoints, migrateToLineConfigs, genLineId } from '../lib/utils';
 
 const SESSION_KEY = 'groundcheck_session';
 
@@ -43,12 +40,29 @@ export default function GroundCheckApp() {
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ projectNumber: '', password: '' });
 
+  // Line switching (dashboard/towers view)
+  const [currentLineId, setCurrentLineId] = useState<string>('');
+
   // Settings
   const [showSettings, setShowSettings] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState({ projectName: '', constructionSection: '', lineName: '' });
 
-  // Tower config in settings
-  const [towerConfigsDraft, setTowerConfigsDraft] = useState<TowerConfig[]>([]);
+  // Line configs in settings
+  const [lineConfigsDraft, setLineConfigsDraft] = useState<LineConfig[]>([]);
+  const [settingsLineId, setSettingsLineId] = useState<string>('');
+  const [newLineName, setNewLineName] = useState('');
+  // Derived: the towers array of the currently-edited line in settings
+  const activeSettingsLine = lineConfigsDraft.find(l => l.id === settingsLineId);
+  const towerConfigsDraft: TowerConfig[] = activeSettingsLine?.towers || [];
+  const setTowerConfigsDraft = (
+    next: TowerConfig[] | ((prev: TowerConfig[]) => TowerConfig[])
+  ) => {
+    setLineConfigsDraft(prev => prev.map(l =>
+      l.id === settingsLineId
+        ? { ...l, towers: typeof next === 'function' ? (next as any)(l.towers) : next }
+        : l
+    ));
+  };
   const [insertStartNum, setInsertStartNum] = useState('');
   const [insertEndNum, setInsertEndNum] = useState('');
   const [insertSingleName, setInsertSingleName] = useState('');
@@ -108,24 +122,34 @@ export default function GroundCheckApp() {
         }
       }
 
-      const configs: TowerConfig[] = freshSettings?.towerConfigs?.length
-        ? freshSettings.towerConfigs
-        : proj.towerConfigs?.length
-          ? proj.towerConfigs
-          : buildDefaultTowerConfigs();
+      // 여러 선로 지원: tower_configs(jsonb)를 LineConfig[]로 정규화
+      const rawConfigs = freshSettings?.towerConfigs ?? proj.towerConfigs;
+      const lineConfigs: LineConfig[] = migrateToLineConfigs(rawConfigs);
 
       const logs = await getLatestGrounding(Date.now(), proj.id);
       const regsRes = await fetch('/api/registries?t=' + Date.now() + '&projectId=' + proj.id);
       const regs = await regsRes.json();
       setRegistries(regs || []);
 
-      const builtTowers = configs.map((cfg: TowerConfig, i: number) => ({
-        id: `tower-${i}`,
-        number: cfg.name,
-        name: cfg.name,
-        points: buildPoints(i, logs),
-      }));
+      const builtTowers: Tower[] = [];
+      lineConfigs.forEach(line => {
+        line.towers.forEach((cfg, i) => {
+          builtTowers.push({
+            id: `${line.id}-tower-${i}`,
+            number: cfg.name,
+            name: cfg.name,
+            lineId: line.id,
+            points: buildPoints(line.id, i, logs),
+          });
+        });
+      });
       setTowers(builtTowers);
+
+      // 활성 선로가 비었거나 더 이상 존재하지 않으면 첫 선로로 리셋
+      setCurrentLineId(prev => {
+        if (prev && lineConfigs.find(l => l.id === prev)) return prev;
+        return lineConfigs[0]?.id || '';
+      });
     } catch (e: any) {
       console.error('Failed to fetch data', e);
     }
@@ -249,6 +273,7 @@ export default function GroundCheckApp() {
   let totalPoints = 0;
   let stats = { none: 0, grounding: 0, removed: 0, exempt: 0 };
   towers.forEach(tower => {
+    if (tower.lineId !== currentLineId) return;
     tower.points.forEach(pt => {
       if (pt.circuit === currentCircuit) {
         if (pt.status in stats) stats[pt.status as keyof typeof stats]++;
@@ -430,8 +455,18 @@ export default function GroundCheckApp() {
       constructionSection: currentProject.constructionSection,
       lineName: currentProject.lineName,
     });
-    const configs = currentProject.towerConfigs?.length ? currentProject.towerConfigs : buildDefaultTowerConfigs();
-    setTowerConfigsDraft([...configs.map(t => ({ ...t }))]);
+    const lineConfigs = migrateToLineConfigs(currentProject.towerConfigs);
+    // 깊은 복사 후 세팅
+    setLineConfigsDraft(lineConfigs.map(l => ({
+      id: l.id,
+      name: l.name,
+      towers: l.towers.map(t => ({ ...t })),
+    })));
+    const activeId = currentLineId && lineConfigs.find(l => l.id === currentLineId)
+      ? currentLineId
+      : lineConfigs[0].id;
+    setSettingsLineId(activeId);
+    setNewLineName('');
     setSettingsError('');
     setSettingsTab('project');
     setGenStart('');
@@ -450,7 +485,7 @@ export default function GroundCheckApp() {
     if (!currentProject) return;
     setIsLoading(true);
     try {
-      const resp = await saveProjectSettings(currentProject.id, currentUser!.id, settingsDraft, towerConfigsDraft);
+      const resp = await saveProjectSettings(currentProject.id, currentUser!.id, settingsDraft, lineConfigsDraft);
       if (resp.success) {
         setShowSettings(false);
         await refreshData();
@@ -523,7 +558,7 @@ export default function GroundCheckApp() {
   };
 
   const handleRemoveTower = (idx: number) => {
-    const tower = towers.find(t => t.id === `tower-${idx}`);
+    const tower = towers.find(t => t.id === `${settingsLineId}-tower-${idx}`);
     if (tower) {
       const hasPhoto = tower.points.some(p => p.history.length > 0);
       const hasExempt = tower.points.some(p => p.status === 'exempt');
@@ -605,6 +640,33 @@ export default function GroundCheckApp() {
       {currentView === 'dashboard' ? (
         <section className="view active">
           <div className="dashboard-container">
+            {/* 선로 선택 */}
+            {(() => {
+              const lineConfigs: LineConfig[] = migrateToLineConfigs(currentProject?.towerConfigs);
+              if (lineConfigs.length <= 1) return null;
+              return (
+                <div className="glass-card" style={{ padding: '0.9rem 1rem', marginBottom: '0.9rem', background: 'white' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>선로 선택</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                    {lineConfigs.map(l => (
+                      <button key={l.id} onClick={() => setCurrentLineId(l.id)}
+                        style={{
+                          padding: '0.4rem 0.85rem',
+                          border: `1px solid ${currentLineId === l.id ? 'var(--primary)' : 'var(--border-color)'}`,
+                          borderRadius: 999,
+                          background: currentLineId === l.id ? 'var(--primary)' : 'white',
+                          color: currentLineId === l.id ? 'white' : 'var(--text-main)',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}>
+                        {l.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             {/* 공사 개요 */}
             <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem', background: 'white' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
@@ -622,12 +684,15 @@ export default function GroundCheckApp() {
                   </div>
                   <div>
                     <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>선로명</span>
-                    <span style={{ fontWeight: 600 }}>{currentProject?.lineName || '-'}</span>
+                    <span style={{ fontWeight: 600 }}>{
+                      migrateToLineConfigs(currentProject?.towerConfigs).find(l => l.id === currentLineId)?.name
+                      || currentProject?.lineName || '-'
+                    }</span>
                   </div>
                 </div>
                 <div>
                   <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>총 철탑수</span>
-                  <span style={{ fontWeight: 800, color: 'var(--primary)' }}>{towers.length}기</span>
+                  <span style={{ fontWeight: 800, color: 'var(--primary)' }}>{towers.filter(t => t.lineId === currentLineId).length}기</span>
                 </div>
               </div>
             </div>
@@ -723,16 +788,56 @@ export default function GroundCheckApp() {
       ) : (
         <section className="view active">
           <div className="towers-container">
+            {/* 선로 선택 */}
+            {(() => {
+              const lineConfigs: LineConfig[] = migrateToLineConfigs(currentProject?.towerConfigs);
+              if (lineConfigs.length <= 1) return null;
+              return (
+                <div className="glass-card" style={{ padding: '0.8rem 1rem', marginBottom: '0.9rem', background: 'white' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>선로 선택</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                    {lineConfigs.map(l => (
+                      <button key={l.id} onClick={() => setCurrentLineId(l.id)}
+                        style={{
+                          padding: '0.4rem 0.85rem',
+                          border: `1px solid ${currentLineId === l.id ? 'var(--primary)' : 'var(--border-color)'}`,
+                          borderRadius: 999,
+                          background: currentLineId === l.id ? 'var(--primary)' : 'white',
+                          color: currentLineId === l.id ? 'white' : 'var(--text-main)',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}>
+                        {l.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             <div className="tower-list">
-              {towers.map(tower => {
-                const points = tower.points.filter(p => p.circuit === currentCircuit);
+              {towers.filter(t => t.lineId === currentLineId).map(tower => {
+                const circuitPoints = tower.points.filter(p => p.circuit === currentCircuit);
                 return (
                   <div key={tower.id} className="tower-item glass-card" onClick={() => setSelectedTowerId(tower.id)}>
                     <div className="tower-number">{tower.name}</div>
-                    <div className="status-dots">
-                      {points.map(p => (
-                        <div key={p.id} className={`status-circle ${p.status === 'grounding' ? 'grounding' : p.status === 'removed' ? 'removed' : p.status === 'exempt' ? 'exempt' : ''}`} />
-                      ))}
+                    {/* A/B/C 3상 × 주/보 2개 = 6개 dot, 상별로 묶음 */}
+                    <div className="status-dots" style={{ display: 'flex', gap: '0.5rem' }}>
+                      {(['a', 'b', 'c'] as const).map(phase => {
+                        const main = circuitPoints.find(p => p.phase === phase && p.groundingType === 'main');
+                        const sub  = circuitPoints.find(p => p.phase === phase && p.groundingType === 'sub');
+                        const dotClass = (p: typeof main) =>
+                          p?.status === 'grounding' ? 'grounding' : p?.status === 'removed' ? 'removed' : p?.status === 'exempt' ? 'exempt' : '';
+                        return (
+                          <div key={phase} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                            <div style={{ display: 'flex', gap: 3 }}>
+                              <div className={`status-circle ${dotClass(main)}`} title={`${phase.toUpperCase()}상 주접지`} />
+                              <div className={`status-circle ${dotClass(sub)}`}  title={`${phase.toUpperCase()}상 보조접지`} />
+                            </div>
+                            <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontWeight: 700 }}>{phase.toUpperCase()}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -955,26 +1060,58 @@ export default function GroundCheckApp() {
               <button className="modal-close" onClick={() => setSelectedTowerId(null)}>✕</button>
             </div>
             <div className="modal-body">
-              {selectedTower.points.filter(p => p.circuit === currentCircuit).map(pt => {
-                const latest = pt.history[0];
+              {/* A/B/C 각 상별 섹션 → 상 안에 주접지·보조접지 행 */}
+              {(['a', 'b', 'c'] as const).map(phase => {
+                const phasePoints = selectedTower.points.filter(
+                  p => p.circuit === currentCircuit && p.phase === phase
+                );
                 return (
-                  <div key={pt.id} className="point-section">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{pt.name}</span>
-                      <span className={`status-badge ${pt.status}`}>{pt.status}</span>
+                  /* .point-section 재사용 금지 — 배경/테두리 충돌 방지 */
+                  <div key={phase} style={{ marginBottom: '1.1rem', borderRadius: 12, border: '2px solid var(--primary)', overflow: 'hidden' }}>
+                    {/* 상 헤더 */}
+                    <div style={{ background: 'var(--primary)', color: 'white', fontWeight: 800, fontSize: '0.95rem', padding: '0.5rem 0.9rem' }}>
+                      {phase.toUpperCase()}상
                     </div>
-                    {latest && latest.userName && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                        관리: {latest.affiliation} {latest.userName} ({new Date(latest.timestamp).toLocaleString()})
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      {latest && <button className="photo-btn" onClick={() => setViewingPhoto({ towerId: selectedTower.id, pointId: pt.id })}>기록보기</button>}
-                      <button className="photo-btn primary" onClick={() => { setSelectedPointId(pt.id); setUploadType('install'); setUploadTowerId(selectedTower.id); }}>설치</button>
-                      {pt.status === 'grounding' && <button className="photo-btn" style={{ borderColor: '#10b981', color: '#10b981' }} onClick={() => { setSelectedPointId(pt.id); setUploadType('remove'); setUploadTowerId(selectedTower.id); }}>철거</button>}
-                      <button className="photo-btn" onClick={() => toggleExempt(selectedTower.id, pt.id, pt.status)} style={{ background: pt.status === 'exempt' ? '#ef4444' : '#f1f5f9', color: pt.status === 'exempt' ? 'white' : 'inherit' }}>
-                        {pt.status === 'exempt' ? '비대상 해제' : '비대상 체크'}
-                      </button>
+                    <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', background: 'white' }}>
+                      {phasePoints.map(pt => {
+                        const latest = pt.history[0];
+                        const isMain = pt.groundingType === 'main';
+                        const typeLabel = isMain ? '주접지' : '보조접지';
+                        return (
+                          <div key={pt.id} style={{
+                            padding: '0.7rem 0.85rem',
+                            background: isMain ? '#eff6ff' : '#f8fafc',
+                            borderRadius: 9,
+                            border: `1px solid ${isMain ? '#bfdbfe' : 'var(--border-color)'}`,
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: isMain ? 'var(--primary)' : 'var(--text-main)' }}>
+                                {typeLabel}
+                              </span>
+                              <span className={`status-badge ${pt.status}`}>{
+                                pt.status === 'grounding' ? '접지중' :
+                                pt.status === 'removed'   ? '철거완료' :
+                                pt.status === 'exempt'    ? '비대상' : '미등록'
+                              }</span>
+                            </div>
+                            {latest && latest.userName && (
+                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                                관리: {latest.affiliation} {latest.userName} ({new Date(latest.timestamp).toLocaleString()})
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                              {latest && <button className="photo-btn" onClick={() => setViewingPhoto({ towerId: selectedTower.id, pointId: pt.id })}>기록보기</button>}
+                              <button className="photo-btn primary" onClick={() => { setSelectedPointId(pt.id); setUploadType('install'); setUploadTowerId(selectedTower.id); }}>설치</button>
+                              {pt.status === 'grounding' && (
+                                <button className="photo-btn" style={{ borderColor: '#10b981', color: '#10b981' }} onClick={() => { setSelectedPointId(pt.id); setUploadType('remove'); setUploadTowerId(selectedTower.id); }}>철거</button>
+                              )}
+                              <button className="photo-btn" onClick={() => toggleExempt(selectedTower.id, pt.id, pt.status)} style={{ background: pt.status === 'exempt' ? '#ef4444' : '#f1f5f9', color: pt.status === 'exempt' ? 'white' : 'inherit' }}>
+                                {pt.status === 'exempt' ? '비대상 해제' : '비대상'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -1115,6 +1252,83 @@ export default function GroundCheckApp() {
                 </>
               ) : (
                 <>
+                  {/* 선로 관리 */}
+                  <div style={{ background: '#eff6ff', borderRadius: 10, padding: '1rem', border: '1px solid #bfdbfe' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.6rem', color: 'var(--text-main)' }}>
+                      선로 관리 ({lineConfigsDraft.length}개)
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.6rem' }}>
+                      {lineConfigsDraft.map(l => (
+                        <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <button onClick={() => setSettingsLineId(l.id)}
+                            style={{
+                              padding: '0.35rem 0.75rem',
+                              border: `1px solid ${settingsLineId === l.id ? 'var(--primary)' : 'var(--border-color)'}`,
+                              borderRadius: 999,
+                              background: settingsLineId === l.id ? 'var(--primary)' : 'white',
+                              color: settingsLineId === l.id ? 'white' : 'var(--text-main)',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}>
+                            {l.name}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    {activeSettingsLine && (
+                      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                        <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, minWidth: 56 }}>현재 선로명</label>
+                        <input type="text" value={activeSettingsLine.name}
+                          onChange={e => {
+                            const v = e.target.value;
+                            setLineConfigsDraft(prev => prev.map(l => l.id === settingsLineId ? { ...l, name: v } : l));
+                          }}
+                          style={{ flex: 1, padding: '0.4rem 0.55rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.85rem', fontFamily: 'var(--font-sans)' }} />
+                        <button
+                          onClick={() => {
+                            if (lineConfigsDraft.length <= 1) {
+                              setSettingsError('선로는 최소 1개 이상 필요합니다.');
+                              return;
+                            }
+                            // 업로드된 데이터가 있는 선로는 삭제 금지
+                            const hasData = towers.some(t => t.lineId === settingsLineId && (t.points.some(p => p.history.length > 0) || t.points.some(p => p.status === 'exempt')));
+                            if (hasData) {
+                              setSettingsError(`삭제 불가: "${activeSettingsLine.name}"에 업로드된 데이터가 있습니다.`);
+                              return;
+                            }
+                            if (!confirm(`"${activeSettingsLine.name}" 선로를 삭제하시겠습니까?`)) return;
+                            setSettingsError('');
+                            const remaining = lineConfigsDraft.filter(l => l.id !== settingsLineId);
+                            setLineConfigsDraft(remaining);
+                            setSettingsLineId(remaining[0].id);
+                          }}
+                          style={{ padding: '0.4rem 0.6rem', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 6, fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                          선로 삭제
+                        </button>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input type="text" placeholder="새 선로명 (예: 이천-광주 T/L)" value={newLineName}
+                        onChange={e => setNewLineName(e.target.value)}
+                        style={{ flex: 1, padding: '0.4rem 0.55rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.85rem', fontFamily: 'var(--font-sans)' }} />
+                      <button
+                        onClick={() => {
+                          const name = newLineName.trim();
+                          if (!name) { setSettingsError('선로명을 입력하세요.'); return; }
+                          if (lineConfigsDraft.some(l => l.name === name)) { setSettingsError('중복 선로명입니다.'); return; }
+                          setSettingsError('');
+                          const newLine: LineConfig = { id: genLineId(), name, towers: [] };
+                          setLineConfigsDraft(prev => [...prev, newLine]);
+                          setSettingsLineId(newLine.id);
+                          setNewLineName('');
+                        }}
+                        style={{ padding: '0.4rem 0.9rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 6, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
+                        선로 추가
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Tower list generator */}
                   <div style={{ background: '#f8fafc', borderRadius: 10, padding: '1rem', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-main)' }}>철탑 리스트 생성</div>
@@ -1157,7 +1371,7 @@ export default function GroundCheckApp() {
                     </div>
                     <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                       {towerConfigsDraft.map((cfg, idx) => {
-                        const tower = towers.find(t => t.id === `tower-${idx}`);
+                        const tower = towers.find(t => t.id === `${settingsLineId}-tower-${idx}`);
                         const hasData = tower && (tower.points.some(p => p.history.length > 0) || tower.points.some(p => p.status === 'exempt'));
                         return (
                           <div key={idx}>
