@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { loginToProject, createProject, getAdminProjects, deleteProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, getPointPhotoHistory, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData, getProjectSettings, saveProjectSettings } from './actions';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import * as XLSX from 'xlsx';
+import { loginToProject, createProject, getAdminProjects, deleteProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, getPointPhotoHistory, getTowerHistory, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData, getProjectSettings, saveProjectSettings } from './actions';
 
 import { AdminProject, User, Project, HistoryItem, Point, Tower, Registry, TowerConfig, LineConfig } from '../lib/types';
 import { buildPoints, migrateToLineConfigs, genLineId } from '../lib/utils';
@@ -22,9 +23,17 @@ export default function GroundCheckApp() {
   const [uploadType, setUploadType] = useState<'install' | 'remove'>('install');
 
   const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
+  const [pendingGPS, setPendingGPS] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'pending' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
   const [viewingPhoto, setViewingPhoto] = useState<{ towerId: string; pointId: string } | null>(null);
   const [viewingHistory, setViewingHistory] = useState<HistoryItem[] | null>(null);
   const [viewingHistoryLoading, setViewingHistoryLoading] = useState(false);
+  // 타워 전체 이력 타임라인
+  const [timelineTowerId, setTimelineTowerId] = useState<string | null>(null);
+  const [timelineData, setTimelineData] = useState<HistoryItem[] | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  // 보고서 다운로드
+  const [exportingReport, setExportingReport] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
@@ -315,12 +324,49 @@ export default function GroundCheckApp() {
     });
   };
 
+  // GPS 캡처 진행 상황을 ref로 유지 (closure 문제 회피)
+  const gpsPromiseRef = useRef<Promise<{ latitude: number; longitude: number; accuracy: number } | null> | null>(null);
+
+  // GPS 좌표를 비동기로 요청. 실패해도 업로드는 계속 진행.
+  const captureGPS = () => {
+    setPendingGPS(null);
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGpsStatus('unsupported');
+      gpsPromiseRef.current = Promise.resolve(null);
+      return;
+    }
+    setGpsStatus('pending');
+    gpsPromiseRef.current = new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const v = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          };
+          setPendingGPS(v);
+          setGpsStatus('ok');
+          resolve(v);
+        },
+        (err) => {
+          console.warn('[GPS]', err);
+          setGpsStatus(err.code === err.PERMISSION_DENIED ? 'denied' : 'error');
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+      );
+    });
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsLoading(true);
     setUploadMessage('이미지 처리 중...');
+
+    // 이미지 처리와 병렬로 GPS 요청 (non-blocking)
+    captureGPS();
 
     try {
       const dataUrl = await processImageFile(file);
@@ -347,6 +393,17 @@ export default function GroundCheckApp() {
     const newStatus: 'grounding' | 'removed' = uploadType === 'install' ? 'grounding' : 'removed';
     const photoPreview = pendingPhotoPreview;
 
+    // GPS 캡처: 이미 성공했으면 그 값 사용. 아직 pending이면 최대 3초 대기.
+    let gps: { latitude: number; longitude: number; accuracy: number } | null = pendingGPS;
+    if (!gps && gpsPromiseRef.current) {
+      try {
+        gps = await Promise.race([
+          gpsPromiseRef.current,
+          new Promise<null>(r => setTimeout(() => r(null), 3000)),
+        ]);
+      } catch { gps = null; }
+    }
+
     setIsLoading(true);
     setUploadMessage('파일 전송 중...');
     try {
@@ -357,6 +414,9 @@ export default function GroundCheckApp() {
         photoData: photoPreview,
         userId: currentUser.id,
         projectId: currentProject.id,
+        latitude: gps?.latitude ?? null,
+        longitude: gps?.longitude ?? null,
+        locationAccuracy: gps?.accuracy ?? null,
       });
       if (resp.success) {
         // 낙관적 업데이트: refreshData 없이 로컬 state만 갱신
@@ -375,6 +435,9 @@ export default function GroundCheckApp() {
                           photo: photoPreview,
                           userName: currentUser.name,
                           affiliation: currentUser.affiliation,
+                          latitude: gps?.latitude ?? null,
+                          longitude: gps?.longitude ?? null,
+                          locationAccuracy: gps?.accuracy ?? null,
                         }, ...p.history],
                       }
                     : p
@@ -385,7 +448,9 @@ export default function GroundCheckApp() {
         setPendingPhotoPreview(null);
         setSelectedPointId(null);
         setUploadTowerId(null);
-        showToast('업로드가 완료되었습니다.');
+        setPendingGPS(null);
+        setGpsStatus('idle');
+        showToast('업로드가 완료되었습니다.' + (gps ? ' 📍 위치 기록됨' : ''));
       } else {
         alert('업로드 기록 실패: ' + resp.error);
       }
@@ -475,6 +540,57 @@ export default function GroundCheckApp() {
       alert('전환 에러: ' + e.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 보고서 Excel 다운로드: 모든 선로 × 철탑 × 회선 × 상 × 주/보접지 포인트 기준.
+  const handleExportReport = async () => {
+    if (!currentProject) return;
+    if (exportingReport) return;
+    setExportingReport(true);
+    try {
+      const lineConfigs: LineConfig[] = migrateToLineConfigs(currentProject.towerConfigs);
+      const lineNameById = new Map(lineConfigs.map(l => [l.id, l.name]));
+      const rows: any[] = [];
+      const statusKor: Record<string, string> = {
+        none: '미등록', grounding: '접지중', removed: '철거완료', exempt: '비대상',
+      };
+      for (const t of towers) {
+        for (const pt of t.points) {
+          const latest = pt.history[0];
+          rows.push({
+            '선로명': lineNameById.get(t.lineId) || '',
+            '철탑번호': t.name,
+            '회선': pt.circuit,
+            '상': pt.phase.toUpperCase(),
+            '접지구분': pt.groundingType === 'main' ? '주접지' : '보조접지',
+            '상태': statusKor[pt.status] || pt.status,
+            '작업자': latest?.userName || '',
+            '소속': latest?.affiliation || '',
+            '작업일시': latest ? new Date(latest.timestamp).toLocaleString() : '',
+            '위도': latest?.latitude ?? '',
+            '경도': latest?.longitude ?? '',
+            '정확도(m)': latest?.locationAccuracy != null ? Math.round(latest.locationAccuracy) : '',
+          });
+        }
+      }
+      const ws = XLSX.utils.json_to_sheet(rows);
+      // 컬럼 폭 보정
+      ws['!cols'] = [
+        { wch: 14 }, { wch: 10 }, { wch: 5 }, { wch: 4 }, { wch: 8 },
+        { wch: 9 }, { wch: 10 }, { wch: 12 }, { wch: 20 },
+        { wch: 11 }, { wch: 11 }, { wch: 9 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '접지현황');
+      const today = new Date().toISOString().slice(0, 10);
+      const safeName = (currentProject.projectName || currentProject.projectNumber || 'project').replace(/[\\/:*?"<>|]/g, '_');
+      XLSX.writeFile(wb, `${safeName}_접지현황_${today}.xlsx`);
+      showToast('보고서가 다운로드되었습니다.');
+    } catch (e: any) {
+      alert('보고서 생성 실패: ' + (e?.message || e));
+    } finally {
+      setExportingReport(false);
     }
   };
 
@@ -745,7 +861,23 @@ export default function GroundCheckApp() {
 
             {/* 접지 현황 */}
             <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-main)' }}>접지 현황 ({currentCircuit}회선)</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>접지 현황 ({currentCircuit}회선)</h3>
+                <button
+                  onClick={handleExportReport}
+                  disabled={exportingReport || towers.length === 0}
+                  style={{
+                    padding: '0.4rem 0.8rem',
+                    background: exportingReport ? '#e5e7eb' : '#10b981',
+                    color: 'white', border: 'none', borderRadius: 8,
+                    fontSize: '0.8rem', fontWeight: 600,
+                    cursor: exportingReport || towers.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: towers.length === 0 ? 0.5 : 1,
+                  }}
+                >
+                  {exportingReport ? '생성 중...' : '📊 보고서 다운로드'}
+                </button>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: '#f8fafc', borderRadius: 12 }}>
                   <span>총 대상개소 <small>(비대상 제외)</small></span>
@@ -1110,7 +1242,35 @@ export default function GroundCheckApp() {
           <div className="modal-content glass-card">
             <div className="modal-header">
               <h2>{selectedTower.name} 접지상세 ({currentCircuit}회선)</h2>
-              <button className="modal-close" onClick={() => setSelectedTowerId(null)}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button
+                  onClick={async () => {
+                    if (!currentProject) return;
+                    setTimelineTowerId(selectedTower.id);
+                    setTimelineData(null);
+                    setTimelineLoading(true);
+                    try {
+                      const rows = await getTowerHistory(selectedTower.id, currentProject.id);
+                      setTimelineData((rows as any[]).map(r => ({
+                        status: r.status,
+                        timestamp: new Date(r.created_at).getTime(),
+                        photo: '',
+                        userName: r.user_name,
+                        affiliation: r.affiliation,
+                        latitude: r.latitude ?? null,
+                        longitude: r.longitude ?? null,
+                        locationAccuracy: r.location_accuracy ?? null,
+                        pointId: r.point_id,
+                      })));
+                    } catch { setTimelineData([]); }
+                    finally { setTimelineLoading(false); }
+                  }}
+                  style={{ padding: '0.35rem 0.75rem', background: '#eff6ff', color: 'var(--primary)', border: '1px solid #bfdbfe', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  📋 작업 이력
+                </button>
+                <button className="modal-close" onClick={() => setSelectedTowerId(null)}>✕</button>
+              </div>
             </div>
             <div className="modal-body">
               {/* A/B/C 각 상별 섹션 → 상 안에 주접지·보조접지 행 */}
@@ -1166,6 +1326,9 @@ export default function GroundCheckApp() {
                                     photo: r.photo_data || '',
                                     userName: r.user_name,
                                     affiliation: r.affiliation,
+                                    latitude: r.latitude ?? null,
+                                    longitude: r.longitude ?? null,
+                                    locationAccuracy: r.location_accuracy ?? null,
                                   })));
                                 } catch { setViewingHistory([]); }
                                 finally { setViewingHistoryLoading(false); }
@@ -1218,9 +1381,77 @@ export default function GroundCheckApp() {
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                         {h.affiliation} {h.userName} &middot; {new Date(h.timestamp).toLocaleString()}
                       </div>
+                      {h.latitude != null && h.longitude != null && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                          📍 <a href={`https://www.google.com/maps?q=${h.latitude},${h.longitude}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
+                            {h.latitude.toFixed(5)}, {h.longitude.toFixed(5)}
+                          </a>
+                          {h.locationAccuracy != null && ` (±${Math.round(h.locationAccuracy)}m)`}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Timeline (Tower full history) Modal ── */}
+      {timelineTowerId && (() => {
+        const tower = towers.find(t => t.id === timelineTowerId);
+        const pointMap = new Map((tower?.points || []).map(p => [p.id, p]));
+        const close = () => { setTimelineTowerId(null); setTimelineData(null); };
+        return (
+          <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && close()}>
+            <div className="modal-content glass-card">
+              <div className="modal-header">
+                <h2>{tower?.name} 작업 이력 타임라인</h2>
+                <button className="modal-close" onClick={close}>✕</button>
+              </div>
+              <div className="modal-body">
+                {timelineLoading ? (
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>이력 불러오는 중...</p>
+                ) : !timelineData || timelineData.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>작업 이력이 없습니다.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    {timelineData.map((h, i) => {
+                      const pt = h.pointId ? pointMap.get(h.pointId) : null;
+                      const label = pt
+                        ? `${pt.circuit}회선 · ${pt.phase.toUpperCase()}상 ${pt.groundingType === 'main' ? '주접지' : '보조접지'}`
+                        : (h.pointId || '');
+                      const statusLabel =
+                        h.status === 'grounding' ? '접지 설치' :
+                        h.status === 'removed'   ? '접지 철거' :
+                        h.status === 'exempt'    ? '비대상 지정' :
+                        h.status === 'none'      ? '상태 초기화' : h.status;
+                      const statusColor =
+                        h.status === 'grounding' ? 'var(--status-grounding)' :
+                        h.status === 'removed'   ? 'var(--status-removed)' : 'var(--text-muted)';
+                      return (
+                        <div key={i} style={{ padding: '0.75rem 0.9rem', border: '1px solid var(--border-color)', borderRadius: 10, background: '#f8fafc' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{label}</span>
+                            <span style={{ fontWeight: 700, fontSize: '0.8rem', color: statusColor }}>{statusLabel}</span>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            {new Date(h.timestamp).toLocaleString()} &middot; {h.affiliation} {h.userName}
+                          </div>
+                          {h.latitude != null && h.longitude != null && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                              📍 <a href={`https://www.google.com/maps?q=${h.latitude},${h.longitude}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
+                                {h.latitude.toFixed(5)}, {h.longitude.toFixed(5)}
+                              </a>
+                              {h.locationAccuracy != null && ` (±${Math.round(h.locationAccuracy)}m)`}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1241,6 +1472,23 @@ export default function GroundCheckApp() {
               {/* disabled 제거: iOS WebKit에서 disabled 시 File 참조가 무효화됨 */}
               <input type="file" accept="image/jpeg, image/png, image/webp" onClick={(e) => { (e.target as any).value = ''; }} onChange={handleFileSelect} />
               {pendingPhotoPreview && <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />}
+              {pendingPhotoPreview && (
+                <div style={{
+                  marginTop: 10, padding: '0.6rem 0.75rem', borderRadius: 8, fontSize: '0.8rem',
+                  background: gpsStatus === 'ok' ? '#ecfdf5' : gpsStatus === 'pending' ? '#eff6ff' : '#fef3c7',
+                  color: gpsStatus === 'ok' ? '#065f46' : gpsStatus === 'pending' ? '#1e40af' : '#92400e',
+                  border: `1px solid ${gpsStatus === 'ok' ? '#a7f3d0' : gpsStatus === 'pending' ? '#bfdbfe' : '#fcd34d'}`,
+                }}>
+                  {gpsStatus === 'pending' && '📍 위치 확인 중...'}
+                  {gpsStatus === 'ok' && pendingGPS && (
+                    <>✅ 위치 기록됨 ({pendingGPS.latitude.toFixed(5)}, {pendingGPS.longitude.toFixed(5)} / ±{Math.round(pendingGPS.accuracy)}m)</>
+                  )}
+                  {gpsStatus === 'denied' && '⚠️ 위치 권한 거부됨 — 사진은 업로드되지만 좌표는 기록되지 않습니다.'}
+                  {gpsStatus === 'unsupported' && '⚠️ 이 기기는 위치 기능을 지원하지 않습니다.'}
+                  {gpsStatus === 'error' && '⚠️ 위치 정보를 가져오지 못했습니다.'}
+                  {gpsStatus === 'idle' && '위치 정보 대기 중...'}
+                </div>
+              )}
               <div className="upload-actions" style={{ marginTop: 20 }}>
                 <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoPreview(null); setUploadTowerId(null); }} disabled={isLoading}>취소</button>
                 <button className="btn-upload" onClick={handlePhotoUpload} disabled={!pendingPhotoPreview || isLoading}>

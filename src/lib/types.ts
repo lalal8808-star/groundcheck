@@ -37,6 +37,10 @@ export type HistoryItem = {
   photo: string;
   userName?: string;
   affiliation?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationAccuracy?: number | null;
+  pointId?: string;   // 타워 전체 이력 조회 시 구분용
 };
 
 export type Phase = 'a' | 'b' | 'c';

@@ -70,6 +70,10 @@ export async function GET(request: Request) {
     try { await sql`ALTER TABLE grounding_logs ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id)`; } catch {}
     try { await sql`ALTER TABLE registries ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id)`; } catch {}
     try { await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL`; } catch {}
+    // GPS 좌표
+    try { await sql`ALTER TABLE grounding_logs ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION`; } catch {}
+    try { await sql`ALTER TABLE grounding_logs ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION`; } catch {}
+    try { await sql`ALTER TABLE grounding_logs ADD COLUMN IF NOT EXISTS location_accuracy DOUBLE PRECISION`; } catch {}
 
     return NextResponse.json({ message: 'Tables created/migrated successfully' });
   } catch (error: any) {

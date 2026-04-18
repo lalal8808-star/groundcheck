@@ -60,6 +60,9 @@ export function buildPoints(lineId: string, towerIdx: number, logs: any[]): Poin
             photo: '',                   // lazy-loaded
             userName: l.user_name,
             affiliation: l.affiliation,
+            latitude: l.latitude ?? null,
+            longitude: l.longitude ?? null,
+            locationAccuracy: l.location_accuracy ?? null,
           })),
         });
       });

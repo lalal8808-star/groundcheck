@@ -276,6 +276,9 @@ export async function uploadGrounding(data: {
   photoData: string;
   userId: string;
   projectId: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationAccuracy?: number | null;
 }) {
   // userId가 해당 프로젝트 소속인지 검증
   try {
@@ -288,12 +291,17 @@ export async function uploadGrounding(data: {
   if (!allowedStatus.includes(data.status)) {
     return { success: false, error: '잘못된 상태값입니다.' };
   }
+  // GPS 좌표 범위 검증 (없으면 null)
+  const lat = typeof data.latitude === 'number' && Math.abs(data.latitude) <= 90 ? data.latitude : null;
+  const lng = typeof data.longitude === 'number' && Math.abs(data.longitude) <= 180 ? data.longitude : null;
+  const acc = typeof data.locationAccuracy === 'number' && data.locationAccuracy >= 0 && data.locationAccuracy < 1e7 ? data.locationAccuracy : null;
   try {
     await sql`
-      INSERT INTO grounding_logs (tower_id, point_id, status, photo_data, user_id, project_id)
-      VALUES (${data.towerId}, ${data.pointId}, ${data.status}, ${data.photoData}, ${data.userId}, ${data.projectId})
+      INSERT INTO grounding_logs
+        (tower_id, point_id, status, photo_data, user_id, project_id, latitude, longitude, location_accuracy)
+      VALUES
+        (${data.towerId}, ${data.pointId}, ${data.status}, ${data.photoData}, ${data.userId}, ${data.projectId}, ${lat}, ${lng}, ${acc})
     `;
-    // revalidatePath 제거: SPA 클라이언트가 자체 상태 관리. 서버 revalidate는 응답 지연만 늘림.
     return { success: true };
   } catch (e: any) {
     console.error(e);
@@ -312,6 +320,7 @@ export async function getLatestGrounding(t?: number, projectId?: string) {
         WITH LatestLogs AS (
           SELECT DISTINCT ON (tower_id, point_id)
             tower_id, point_id, status, user_id, created_at,
+            latitude, longitude, location_accuracy,
             (photo_data IS NOT NULL) AS has_photo
           FROM grounding_logs
           WHERE project_id = ${projectId}
@@ -340,12 +349,37 @@ export async function getPointPhotoHistory(
 ) {
   try {
     const result = await sql`
-      SELECT l.status, l.photo_data, l.created_at, u.name as user_name, u.affiliation
+      SELECT l.status, l.photo_data, l.created_at,
+             l.latitude, l.longitude, l.location_accuracy,
+             u.name as user_name, u.affiliation
       FROM grounding_logs l
       LEFT JOIN users u ON l.user_id = u.id
       WHERE l.project_id = ${projectId}
         AND l.tower_id = ${towerId}
         AND l.point_id = ${pointId}
+      ORDER BY l.created_at DESC
+    `;
+    return result;
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
+/**
+ * 철탑 1기의 모든 포인트에 대한 전체 작업 이력 (타임라인용, photo_data 제외).
+ */
+export async function getTowerHistory(towerId: string, projectId: string) {
+  try {
+    const result = await sql`
+      SELECT l.point_id, l.status, l.created_at,
+             l.latitude, l.longitude, l.location_accuracy,
+             (l.photo_data IS NOT NULL) AS has_photo,
+             u.name as user_name, u.affiliation
+      FROM grounding_logs l
+      LEFT JOIN users u ON l.user_id = u.id
+      WHERE l.project_id = ${projectId}
+        AND l.tower_id = ${towerId}
       ORDER BY l.created_at DESC
     `;
     return result;
