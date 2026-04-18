@@ -23,8 +23,9 @@ export default function GroundCheckApp() {
   const [uploadType, setUploadType] = useState<'install' | 'remove'>('install');
 
   const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
-  const [pendingGPS, setPendingGPS] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
+  const [pendingGPS, setPendingGPS] = useState<{ latitude: number; longitude: number; accuracy: number | null } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'pending' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
+  const [gpsSource, setGpsSource] = useState<'exif' | 'browser' | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<{ towerId: string; pointId: string } | null>(null);
   const [viewingHistory, setViewingHistory] = useState<HistoryItem[] | null>(null);
   const [viewingHistoryLoading, setViewingHistoryLoading] = useState(false);
@@ -325,11 +326,10 @@ export default function GroundCheckApp() {
   };
 
   // GPS 캡처 진행 상황을 ref로 유지 (closure 문제 회피)
-  const gpsPromiseRef = useRef<Promise<{ latitude: number; longitude: number; accuracy: number } | null> | null>(null);
+  const gpsPromiseRef = useRef<Promise<{ latitude: number; longitude: number; accuracy: number | null } | null> | null>(null);
 
-  // GPS 좌표를 비동기로 요청. 실패해도 업로드는 계속 진행.
-  const captureGPS = () => {
-    setPendingGPS(null);
+  // 브라우저 Geolocation API로 현재 위치 캡처 (EXIF GPS 없을 때 폴백)
+  const captureBrowserGPS = () => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setGpsStatus('unsupported');
       gpsPromiseRef.current = Promise.resolve(null);
@@ -339,12 +339,9 @@ export default function GroundCheckApp() {
     gpsPromiseRef.current = new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const v = {
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-          };
+          const v = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
           setPendingGPS(v);
+          setGpsSource('browser');
           setGpsStatus('ok');
           resolve(v);
         },
@@ -358,28 +355,58 @@ export default function GroundCheckApp() {
     });
   };
 
+  // 파일 EXIF에서 GPS 추출. 성공하면 state 세팅 후 값 반환, 없으면 null.
+  const extractExifGPS = async (file: File): Promise<{ latitude: number; longitude: number; accuracy: number | null } | null> => {
+    try {
+      const exifr = (await import('exifr')).default;
+      const gps = await exifr.gps(file);
+      if (gps && typeof gps.latitude === 'number' && typeof gps.longitude === 'number') {
+        const v = { latitude: gps.latitude, longitude: gps.longitude, accuracy: null };
+        setPendingGPS(v);
+        setGpsSource('exif');
+        setGpsStatus('ok');
+        gpsPromiseRef.current = Promise.resolve(v);
+        return v;
+      }
+    } catch (e) {
+      console.warn('[EXIF GPS]', e);
+    }
+    return null;
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsLoading(true);
     setUploadMessage('이미지 처리 중...');
+    setPendingGPS(null);
+    setGpsSource(null);
+    setGpsStatus('idle');
 
-    // 이미지 처리와 병렬로 GPS 요청 (non-blocking)
-    captureGPS();
+    // 이미지 처리 + EXIF GPS 추출 병렬 실행
+    const [dataUrl, exifGps] = await Promise.allSettled([
+      processImageFile(file),
+      extractExifGPS(file),
+    ]);
 
-    try {
-      const dataUrl = await processImageFile(file);
-      setPendingPhotoPreview(dataUrl);
-
-    } catch (err: any) {
-      console.error('[handleFileSelect]', err);
-      alert('이미지 처리 실패: ' + (err?.message || '알 수 없는 오류'));
+    if (dataUrl.status === 'rejected') {
+      console.error('[handleFileSelect]', dataUrl.reason);
+      alert('이미지 처리 실패: ' + (dataUrl.reason?.message || '알 수 없는 오류'));
       if (e.target) e.target.value = '';
-    } finally {
       setIsLoading(false);
       setUploadMessage('');
+      return;
     }
+    setPendingPhotoPreview(dataUrl.value);
+
+    // EXIF에 GPS가 없으면 브라우저 위치로 폴백 (non-blocking)
+    if (exifGps.status === 'fulfilled' && !exifGps.value) {
+      captureBrowserGPS();
+    }
+
+    setIsLoading(false);
+    setUploadMessage('');
   };
 
 
@@ -394,7 +421,7 @@ export default function GroundCheckApp() {
     const photoPreview = pendingPhotoPreview;
 
     // GPS 캡처: 이미 성공했으면 그 값 사용. 아직 pending이면 최대 3초 대기.
-    let gps: { latitude: number; longitude: number; accuracy: number } | null = pendingGPS;
+    let gps: { latitude: number; longitude: number; accuracy: number | null } | null = pendingGPS;
     if (!gps && gpsPromiseRef.current) {
       try {
         gps = await Promise.race([
@@ -450,6 +477,7 @@ export default function GroundCheckApp() {
         setUploadTowerId(null);
         setPendingGPS(null);
         setGpsStatus('idle');
+        setGpsSource(null);
         showToast('업로드가 완료되었습니다.' + (gps ? ' 📍 위치 기록됨' : ''));
       } else {
         alert('업로드 기록 실패: ' + resp.error);
@@ -1481,12 +1509,16 @@ export default function GroundCheckApp() {
                 }}>
                   {gpsStatus === 'pending' && '📍 위치 확인 중...'}
                   {gpsStatus === 'ok' && pendingGPS && (
-                    <>✅ 위치 기록됨 ({pendingGPS.latitude.toFixed(5)}, {pendingGPS.longitude.toFixed(5)} / ±{Math.round(pendingGPS.accuracy)}m)</>
+                    <>
+                      {gpsSource === 'exif' ? '📸 촬영 위치 기록됨' : '📍 업로드 위치 기록됨'}
+                      {' '}({pendingGPS.latitude.toFixed(5)}, {pendingGPS.longitude.toFixed(5)}
+                      {pendingGPS.accuracy != null && ` / ±${Math.round(pendingGPS.accuracy)}m`})
+                    </>
                   )}
-                  {gpsStatus === 'denied' && '⚠️ 위치 권한 거부됨 — 사진은 업로드되지만 좌표는 기록되지 않습니다.'}
+                  {gpsStatus === 'denied' && '⚠️ 위치 권한 거부됨 — 사진 EXIF에도 GPS가 없어 좌표가 기록되지 않습니다.'}
                   {gpsStatus === 'unsupported' && '⚠️ 이 기기는 위치 기능을 지원하지 않습니다.'}
                   {gpsStatus === 'error' && '⚠️ 위치 정보를 가져오지 못했습니다.'}
-                  {gpsStatus === 'idle' && '위치 정보 대기 중...'}
+                  {gpsStatus === 'idle' && '위치 정보 확인 중...'}
                 </div>
               )}
               <div className="upload-actions" style={{ marginTop: 20 }}>
