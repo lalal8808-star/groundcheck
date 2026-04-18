@@ -1,1832 +1,1770 @@
-'use client';
+import type { Metadata } from 'next';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import * as XLSX from 'xlsx';
-import { loginToProject, createProject, getAdminProjects, deleteProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, getPointPhotoHistory, getTowerHistory, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData, getProjectSettings, saveProjectSettings } from './actions';
+export const metadata: Metadata = {
+  title: '접지관리 시스템 | Groundcheck - 154kV 이천-가남 T/L 가공송전선로',
+  description: '154kV 이천-가남 T/L 가공송전선로 설치공사 접지개소 주접지 및 보조접지 통합 관리 시스템',
+};
 
-import { AdminProject, User, Project, HistoryItem, Point, Tower, Registry, TowerConfig, LineConfig } from '../lib/types';
-import { buildPoints, migrateToLineConfigs, genLineId } from '../lib/utils';
+export default function LandingPage() {
+  const css = String.raw`
+  :root {
+    --kepco-blue: #0052A4;
+    --kepco-blue-dark: #003478;
+    --kepco-blue-darker: #00214F;
+    --kepco-blue-light: #E8F0FA;
+    --kepco-gold: #F7A600;
+    --kepco-gray-50: #F7F9FC;
+    --kepco-gray-100: #EEF2F7;
+    --kepco-gray-200: #D9E0EA;
+    --kepco-gray-500: #6B7684;
+    --kepco-gray-700: #3B4754;
+    --kepco-gray-900: #1A2331;
+    --border: #E2E8F0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--kepco-gray-900);
+    background: #fff;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { text-decoration: none; color: inherit; }
+  img { max-width: 100%; display: block; }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
 
-const SESSION_KEY = 'groundcheck_session';
+  /* ---------- TOP BAR ---------- */
+  .topbar {
+    background: var(--kepco-blue-darker);
+    color: #cfd8e6;
+    font-size: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .topbar .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .topbar a { margin-left: 16px; }
+  .topbar a:hover { color: #fff; }
 
-export default function GroundCheckApp() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentProject, setCurrentProject] = useState<Project | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'towers'>('dashboard');
-  const [currentCircuit, setCurrentCircuit] = useState(1);
-  const [towers, setTowers] = useState<Tower[]>([]);
-  const [registries, setRegistries] = useState<Registry[]>([]);
+  /* ---------- HEADER ---------- */
+  header.main {
+    background: #fff;
+    border-bottom: 2px solid var(--kepco-blue);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  header.main .container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 72px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo-mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--kepco-blue) 0%, var(--kepco-blue-dark) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 22px;
+    box-shadow: 0 2px 6px rgba(0,82,164,0.25);
+  }
+  .logo-text h1 {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--kepco-blue-darker);
+    letter-spacing: -0.02em;
+  }
+  .logo-text p {
+    font-size: 11px;
+    color: var(--kepco-gray-500);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+  }
+  nav ul {
+    display: flex;
+    list-style: none;
+    gap: 36px;
+  }
+  nav a {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--kepco-gray-700);
+    padding: 8px 0;
+    position: relative;
+    transition: color 0.2s;
+  }
+  nav a:hover { color: var(--kepco-blue); }
+  nav a:hover::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: var(--kepco-blue);
+  }
+  .header-cta {
+    background: var(--kepco-blue);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  .header-cta:hover { background: var(--kepco-blue-dark); }
 
-  const [selectedTowerId, setSelectedTowerId] = useState<string | null>(null);
-  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
-  const [uploadTowerId, setUploadTowerId] = useState<string | null>(null);
-  const [uploadType, setUploadType] = useState<'install' | 'remove'>('install');
+  /* ---------- HERO ---------- */
+  .hero {
+    background:
+      linear-gradient(135deg, rgba(0,33,79,0.95) 0%, rgba(0,82,164,0.9) 100%),
+      radial-gradient(circle at 80% 20%, rgba(247,166,0,0.15) 0%, transparent 40%);
+    background-color: var(--kepco-blue-darker);
+    color: #fff;
+    padding: 80px 0 100px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: 0; right: 0;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 60%);
+    border-radius: 50%;
+    transform: translate(30%, -30%);
+  }
+  .hero .container { position: relative; z-index: 1; }
+  .hero-badge {
+    display: inline-block;
+    background: rgba(247,166,0,0.15);
+    color: var(--kepco-gold);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    margin-bottom: 20px;
+    border: 1px solid rgba(247,166,0,0.3);
+  }
+  .hero h2 {
+    font-size: 48px;
+    font-weight: 900;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+    margin-bottom: 20px;
+  }
+  .hero h2 .accent { color: var(--kepco-gold); }
+  .hero-sub {
+    font-size: 18px;
+    font-weight: 300;
+    color: #cfd8e6;
+    max-width: 640px;
+    margin-bottom: 36px;
+    line-height: 1.7;
+  }
+  .hero-project-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding: 20px 28px;
+    background: rgba(255,255,255,0.08);
+    border-left: 4px solid var(--kepco-gold);
+    border-radius: 4px;
+    margin-bottom: 36px;
+    max-width: 720px;
+    backdrop-filter: blur(8px);
+  }
+  .hero-project-info .item strong {
+    display: block;
+    font-size: 11px;
+    color: #9fb3d1;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .hero-project-info .item span {
+    font-size: 15px;
+    color: #fff;
+    font-weight: 500;
+  }
+  .hero-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 28px;
+    border-radius: 4px;
+    font-size: 15px;
+    font-weight: 600;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+  }
+  .btn-primary {
+    background: var(--kepco-gold);
+    color: var(--kepco-blue-darker);
+  }
+  .btn-primary:hover { background: #fdb927; transform: translateY(-1px); }
+  .btn-outline {
+    background: transparent;
+    border: 1.5px solid rgba(255,255,255,0.4);
+    color: #fff;
+  }
+  .btn-outline:hover { background: rgba(255,255,255,0.1); border-color: #fff; }
 
-  const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
-  const [pendingGPS, setPendingGPS] = useState<{ latitude: number; longitude: number; accuracy: number | null } | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<'idle' | 'pending' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
-  const [gpsSource, setGpsSource] = useState<'exif' | 'browser' | null>(null);
-  const [viewingPhoto, setViewingPhoto] = useState<{ towerId: string; pointId: string } | null>(null);
-  const [viewingHistory, setViewingHistory] = useState<HistoryItem[] | null>(null);
-  const [viewingHistoryLoading, setViewingHistoryLoading] = useState(false);
-  // 타워 전체 이력 타임라인
-  const [timelineTowerId, setTimelineTowerId] = useState<string | null>(null);
-  const [timelineData, setTimelineData] = useState<HistoryItem[] | null>(null);
-  const [timelineLoading, setTimelineLoading] = useState(false);
-  // 보고서 다운로드
-  const [exportingReport, setExportingReport] = useState(false);
-  const [toastMsg, setToastMsg] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState('');
+  /* ---------- STATS ---------- */
+  .stats {
+    background: #fff;
+    margin-top: -50px;
+    position: relative;
+    z-index: 2;
+    border-radius: 8px;
+    box-shadow: 0 10px 40px rgba(0,33,79,0.12);
+    padding: 32px 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .stat-item {
+    text-align: center;
+    padding: 12px 20px;
+    border-right: 1px solid var(--border);
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-item .num {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--kepco-blue);
+    line-height: 1;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+  .stat-item .label {
+    font-size: 13px;
+    color: var(--kepco-gray-500);
+    font-weight: 500;
+  }
 
-  // Auth modal
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authTab, setAuthTab] = useState<'login' | 'admin'>('login');
-  const [loginForm, setLoginForm] = useState({ name: '', affiliation: '', projectNumber: '', password: '' });
-  const [adminPassword, setAdminPassword] = useState('');
-  const [adminAuthed, setAdminAuthed] = useState(false);
-  const [adminForm, setAdminForm] = useState({ projectNumber: '', password: '', projectName: '' });
-  const [adminProjects, setAdminProjects] = useState<AdminProject[]>([]);
-  const [adminView, setAdminView] = useState<'create' | 'list'>('list');
-  const [authError, setAuthError] = useState('');
-  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ projectNumber: '', password: '' });
+  /* ---------- SECTION COMMON ---------- */
+  section.page-section {
+    padding: 100px 0;
+  }
+  .section-head {
+    text-align: center;
+    max-width: 720px;
+    margin: 0 auto 64px;
+  }
+  .section-eyebrow {
+    display: inline-block;
+    color: var(--kepco-blue);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    margin-bottom: 12px;
+    position: relative;
+    padding-bottom: 12px;
+  }
+  .section-eyebrow::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32px;
+    height: 3px;
+    background: var(--kepco-gold);
+  }
+  .section-head h3 {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--kepco-blue-darker);
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+    line-height: 1.3;
+  }
+  .section-head p {
+    font-size: 16px;
+    color: var(--kepco-gray-500);
+    line-height: 1.8;
+  }
 
-  // Line switching (dashboard/towers view)
-  const [currentLineId, setCurrentLineId] = useState<string>('');
+  /* ---------- ABOUT ---------- */
+  .about {
+    background: var(--kepco-gray-50);
+  }
+  .about-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+  }
+  .about-text h4 {
+    font-size: 13px;
+    color: var(--kepco-blue);
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    margin-bottom: 16px;
+  }
+  .about-text h3 {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--kepco-blue-darker);
+    margin-bottom: 24px;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+  }
+  .about-text p {
+    font-size: 15px;
+    color: var(--kepco-gray-700);
+    line-height: 1.9;
+    margin-bottom: 20px;
+  }
+  .about-text ul {
+    list-style: none;
+    margin-top: 20px;
+  }
+  .about-text ul li {
+    padding: 10px 0 10px 28px;
+    position: relative;
+    font-size: 15px;
+    color: var(--kepco-gray-700);
+    border-bottom: 1px solid var(--border);
+  }
+  .about-text ul li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: var(--kepco-blue);
+    font-weight: 700;
+  }
+  .about-visual {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 36px;
+    box-shadow: 0 4px 16px rgba(0,33,79,0.06);
+  }
+  .mock-dashboard {
+    background: var(--kepco-blue-darker);
+    border-radius: 6px;
+    padding: 16px;
+    color: #fff;
+  }
+  .mock-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 16px;
+  }
+  .mock-header .title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .mock-header .circuit-tabs {
+    display: flex;
+    gap: 4px;
+    font-size: 11px;
+  }
+  .mock-header .circuit-tabs span {
+    padding: 4px 10px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.1);
+  }
+  .mock-header .circuit-tabs span.active {
+    background: var(--kepco-gold);
+    color: var(--kepco-blue-darker);
+    font-weight: 700;
+  }
+  .mock-towers {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+  .mock-tower {
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    padding: 10px 6px;
+    text-align: center;
+    font-size: 10px;
+  }
+  .mock-tower .name {
+    color: #9fb3d1;
+    margin-bottom: 6px;
+  }
+  .mock-tower .dots {
+    display: flex;
+    justify-content: center;
+    gap: 3px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #3a5a82;
+  }
+  .dot.g { background: #22c55e; }
+  .dot.r { background: #ef4444; }
+  .dot.e { background: #6b7280; }
+  .dot.y { background: var(--kepco-gold); }
+  .mock-legend {
+    display: flex;
+    gap: 14px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    font-size: 10px;
+    color: #9fb3d1;
+  }
+  .mock-legend span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
 
-  // Settings
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsDraft, setSettingsDraft] = useState({ projectName: '', constructionSection: '', lineName: '' });
+  /* ---------- FEATURES ---------- */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  .feature-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 32px 28px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .feature-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 3px;
+    background: linear-gradient(90deg, var(--kepco-blue), var(--kepco-gold));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s;
+  }
+  .feature-card:hover {
+    border-color: var(--kepco-blue);
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(0,82,164,0.12);
+  }
+  .feature-card:hover::before { transform: scaleX(1); }
+  .feature-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+    background: var(--kepco-blue-light);
+    color: var(--kepco-blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+    font-size: 24px;
+  }
+  .feature-card h4 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--kepco-blue-darker);
+    margin-bottom: 10px;
+    letter-spacing: -0.01em;
+  }
+  .feature-card p {
+    font-size: 14px;
+    color: var(--kepco-gray-500);
+    line-height: 1.8;
+    margin-bottom: 14px;
+  }
+  .feature-card .tag {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--kepco-blue);
+    background: var(--kepco-blue-light);
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
 
-  // Line configs in settings
-  const [lineConfigsDraft, setLineConfigsDraft] = useState<LineConfig[]>([]);
-  const [settingsLineId, setSettingsLineId] = useState<string>('');
-  const [newLineName, setNewLineName] = useState('');
-  // Derived: the towers array of the currently-edited line in settings
-  const activeSettingsLine = lineConfigsDraft.find(l => l.id === settingsLineId);
-  const towerConfigsDraft: TowerConfig[] = activeSettingsLine?.towers || [];
-  const setTowerConfigsDraft = (
-    next: TowerConfig[] | ((prev: TowerConfig[]) => TowerConfig[])
-  ) => {
-    setLineConfigsDraft(prev => prev.map(l =>
-      l.id === settingsLineId
-        ? { ...l, towers: typeof next === 'function' ? (next as any)(l.towers) : next }
-        : l
-    ));
-  };
-  const [insertStartNum, setInsertStartNum] = useState('');
-  const [insertEndNum, setInsertEndNum] = useState('');
-  const [insertSingleName, setInsertSingleName] = useState('');
-  const [insertMode, setInsertMode] = useState<'single' | 'range'>('single');
-  const [insertAfterIdx, setInsertAfterIdx] = useState<number | null>(null);
-  const [genStart, setGenStart] = useState('');
-  const [genEnd, setGenEnd] = useState('');
-  const [genPrefix, setGenPrefix] = useState('');
-  const [genSuffix, setGenSuffix] = useState('호');
-  const [settingsError, setSettingsError] = useState('');
-  const [settingsTab, setSettingsTab] = useState<'project' | 'towers'>('project');
+  /* ---------- DETAILED FEATURES ---------- */
+  .detail {
+    background: var(--kepco-gray-50);
+  }
+  .detail-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+    margin-bottom: 80px;
+  }
+  .detail-row:last-child { margin-bottom: 0; }
+  .detail-row.reverse .detail-text { order: 2; }
+  .detail-row.reverse .detail-visual { order: 1; }
+  .detail-text .step {
+    display: inline-block;
+    font-size: 12px;
+    background: var(--kepco-blue);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 3px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    letter-spacing: 0.08em;
+  }
+  .detail-text h3 {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--kepco-blue-darker);
+    margin-bottom: 18px;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+  }
+  .detail-text p {
+    font-size: 15px;
+    color: var(--kepco-gray-700);
+    line-height: 1.9;
+    margin-bottom: 20px;
+  }
+  .detail-list {
+    list-style: none;
+    margin-top: 20px;
+  }
+  .detail-list li {
+    padding: 12px 0 12px 32px;
+    position: relative;
+    font-size: 14px;
+    color: var(--kepco-gray-700);
+  }
+  .detail-list li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 18px;
+    width: 18px; height: 2px;
+    background: var(--kepco-blue);
+  }
+  .detail-list li strong {
+    color: var(--kepco-blue-darker);
+    font-weight: 700;
+  }
+  .detail-visual {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px;
+    box-shadow: 0 6px 24px rgba(0,33,79,0.06);
+    min-height: 320px;
+  }
 
-  // Load session from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem(SESSION_KEY);
-    if (saved) {
-      try {
-        const { user, project } = JSON.parse(saved);
-        if (user && project) {
-          setCurrentUser(user);
-          setCurrentProject(project);
-          return;
-        }
-      } catch { /* ignore */ }
+  /* ---------- REAL-UI ACCURATE MOCKUPS ---------- */
+  /* 실제 앱 UI에 맞춘 재현 목업 */
+  .app-frame {
+    background: linear-gradient(180deg, #f0f3fa 0%, #e8ebf7 100%);
+    border-radius: 10px;
+    padding: 14px 16px 16px;
+    font-size: 12px;
+    color: #1f2937;
+    border: 1px solid #d9dcec;
+  }
+  .app-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .app-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    color: #1f2937;
+    font-size: 13px;
+  }
+  .app-logo {
+    width: 24px; height: 24px;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 13px;
+  }
+  .app-right {
+    display: flex; align-items: center; gap: 6px;
+    color: #6b7280; font-size: 10px;
+  }
+  .app-circuit-tabs {
+    display: inline-flex;
+    background: #fff;
+    border-radius: 18px;
+    padding: 2px;
+    margin-left: 6px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .app-circuit-tabs span {
+    padding: 3px 10px;
+    border-radius: 16px;
+    font-size: 10px;
+    color: #6b7280;
+    font-weight: 500;
+  }
+  .app-circuit-tabs span.on {
+    background: #eef2ff;
+    color: #4f46e5;
+    font-weight: 700;
+  }
+  .app-tabs-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .app-tab {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+  }
+  .app-tab.on {
+    border-color: #6366f1;
+    color: #4f46e5;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.08);
+  }
+
+  .app-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 14px 14px;
+    margin-bottom: 10px;
+  }
+  .app-card h6 {
+    font-size: 12px;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 10px;
+  }
+  .app-kv { display: flex; justify-content: space-between; padding: 3px 0; font-size: 10.5px; }
+  .app-kv .k { color: #9ca3af; }
+  .app-kv .v { color: #111827; font-weight: 600; }
+  .app-kv .v.blue { color: #4f46e5; font-weight: 700; }
+
+  .app-stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .app-stat {
+    border-radius: 8px;
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 10px;
+  }
+  .app-stat .num { font-size: 16px; font-weight: 800; margin-top: 2px; }
+  .app-stat.gray { background: #f3f4f6; color: #6b7280; }
+  .app-stat.red { background: #fef2f2; color: #dc2626; }
+  .app-stat.green { background: #ecfdf5; color: #059669; }
+
+  .app-progress-wrap {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #e5e7eb;
+  }
+  .app-progress-label {
+    display: flex; justify-content: space-between;
+    font-size: 10.5px; margin-bottom: 4px;
+  }
+  .app-progress-label .pct { color: #059669; font-weight: 700; }
+  .app-progress-bar {
+    height: 5px; background: #f3f4f6; border-radius: 4px; overflow: hidden;
+  }
+  .app-progress-bar span {
+    display: block; height: 100%; width: 3%; background: #10b981; border-radius: 4px;
+  }
+
+  /* Tower grid */
+  .app-tower-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .app-tower {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px 6px;
+    text-align: center;
+  }
+  .app-tower .tname {
+    font-size: 12px;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: 6px;
+  }
+  .app-phase-row {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    font-size: 8px;
+    color: #9ca3af;
+  }
+  .app-phase {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    min-width: 18px;
+  }
+  .app-phase .dots {
+    display: flex; gap: 1px;
+  }
+  .pdot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #e5e7eb;
+    display: inline-block;
+  }
+  .pdot.g { background: #10b981; }
+  .pdot.r { background: #ef4444; }
+  .pdot.x { background: #ef4444; position: relative; }
+  .pdot.empty { background: transparent; border: 1px dashed #d1d5db; }
+  .pdot.gray { background: #9ca3af; }
+
+  /* Detail modal */
+  .app-modal {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(17,24,39,0.08);
+    padding: 14px;
+  }
+  .app-modal-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .app-modal-title { font-size: 13px; font-weight: 800; color: #111827; }
+  .app-modal-btn {
+    background: #f3f4f6; color: #374151; font-size: 10px;
+    padding: 4px 10px; border-radius: 5px; font-weight: 600;
+  }
+  .app-phase-head {
+    background: #4f46e5; color: #fff;
+    padding: 7px 12px; border-radius: 6px 6px 0 0;
+    font-size: 12px; font-weight: 700;
+  }
+  .app-phase-body {
+    border: 1px solid #e5e7eb; border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .app-point {
+    padding: 8px 0;
+  }
+  .app-point + .app-point { border-top: 1px dashed #e5e7eb; }
+  .app-point-head {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; font-weight: 700; color: #4f46e5;
+    margin-bottom: 2px;
+  }
+  .app-badge {
+    font-size: 10px; font-weight: 700;
+    padding: 2px 8px; border-radius: 4px;
+  }
+  .app-badge.red { background: #fee2e2; color: #dc2626; }
+  .app-badge.green { background: #dcfce7; color: #15803d; }
+  .app-badge.gray { background: #f3f4f6; color: #6b7280; }
+  .app-point-meta {
+    font-size: 9.5px; color: #9ca3af; margin-bottom: 6px;
+  }
+  .app-btn-row {
+    display: flex; gap: 4px;
+  }
+  .app-btn-row .ab {
+    font-size: 10px; font-weight: 600;
+    padding: 5px 10px; border-radius: 5px;
+    border: 1px solid #e5e7eb; background: #fff; color: #374151;
+  }
+  .app-btn-row .ab.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  .app-btn-row .ab.green { background: #fff; border-color: #10b981; color: #059669; }
+  .app-btn-row .ab.red { background: #ef4444; border-color: #ef4444; color: #fff; }
+
+  /* Timeline */
+  .app-timeline-item {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 6px;
+  }
+  .app-timeline-item .line { font-size: 11px; font-weight: 700; color: #111827; margin-bottom: 2px; }
+  .app-timeline-item .when { font-size: 9.5px; color: #9ca3af; }
+  .app-timeline-item .status { font-size: 10px; font-weight: 700; }
+  .app-timeline-item .status.red { color: #dc2626; }
+  .app-timeline-item .status.green { color: #15803d; }
+  .app-timeline-item .status.gray { color: #6b7280; }
+
+  /* Mock UI pieces */
+  .mock-login {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px;
+  }
+  .mock-login h5 {
+    font-size: 15px;
+    color: var(--kepco-blue-darker);
+    margin-bottom: 16px;
+    font-weight: 700;
+  }
+  .mock-field {
+    background: var(--kepco-gray-50);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--kepco-gray-500);
+    margin-bottom: 10px;
+  }
+  .mock-field.filled {
+    color: var(--kepco-gray-900);
+    background: #fff;
+    border-color: var(--kepco-blue);
+  }
+  .mock-btn {
+    background: var(--kepco-blue);
+    color: #fff;
+    text-align: center;
+    padding: 11px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 6px;
+  }
+
+  .mock-photo {
+    background: linear-gradient(135deg, #e0e7f0 0%, #c6d4e6 100%);
+    border-radius: 6px;
+    aspect-ratio: 4/3;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .mock-photo::after {
+    content: "📷";
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 36px;
+    opacity: 0.4;
+  }
+  .mock-gps {
+    background: var(--kepco-blue-darker);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .mock-gps .lat { color: var(--kepco-gold); font-weight: 600; font-family: monospace; }
+
+  .mock-timeline {
+    position: relative;
+    padding-left: 24px;
+  }
+  .mock-timeline::before {
+    content: "";
+    position: absolute;
+    left: 7px; top: 10px; bottom: 10px;
+    width: 2px;
+    background: var(--border);
+  }
+  .timeline-item {
+    position: relative;
+    margin-bottom: 18px;
+  }
+  .timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -22px; top: 5px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--kepco-blue);
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px var(--border);
+  }
+  .timeline-item .meta {
+    font-size: 11px;
+    color: var(--kepco-gray-500);
+    margin-bottom: 3px;
+  }
+  .timeline-item .desc {
+    font-size: 13px;
+    color: var(--kepco-gray-900);
+    font-weight: 500;
+  }
+
+  .mock-file {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    background: var(--kepco-gray-50);
+    border-radius: 4px;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .mock-file .name { font-weight: 500; color: var(--kepco-gray-900); }
+  .mock-file .name::before { content: "📄 "; margin-right: 4px; }
+  .mock-file .date { color: var(--kepco-gray-500); font-size: 11px; }
+
+  /* ---------- TECH STACK ---------- */
+  .tech {
+    background: #fff;
+  }
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .tech-card {
+    background: var(--kepco-gray-50);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px 20px;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .tech-card:hover {
+    border-color: var(--kepco-blue);
+    background: #fff;
+    transform: translateY(-2px);
+  }
+  .tech-card .tech-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--kepco-blue-darker);
+    margin-bottom: 6px;
+  }
+  .tech-card .tech-desc {
+    font-size: 12px;
+    color: var(--kepco-gray-500);
+  }
+
+  /* ---------- SECURITY ---------- */
+  .security {
+    background: linear-gradient(135deg, var(--kepco-blue-darker) 0%, var(--kepco-blue) 100%);
+    color: #fff;
+  }
+  .security .section-head h3 { color: #fff; }
+  .security .section-head p { color: #cfd8e6; }
+  .security .section-eyebrow { color: var(--kepco-gold); }
+  .security .section-eyebrow::after { background: var(--kepco-gold); }
+  .sec-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  .sec-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 32px 28px;
+    backdrop-filter: blur(6px);
+  }
+  .sec-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: rgba(247,166,0,0.15);
+    color: var(--kepco-gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin-bottom: 18px;
+    border: 1px solid rgba(247,166,0,0.3);
+  }
+  .sec-card h4 {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .sec-card p {
+    font-size: 13px;
+    color: #b8c6dc;
+    line-height: 1.8;
+  }
+
+  /* ---------- CTA ---------- */
+  .cta {
+    background: var(--kepco-gray-50);
+    padding: 80px 0;
+  }
+  .cta-box {
+    background: #fff;
+    border-radius: 8px;
+    padding: 60px;
+    text-align: center;
+    border-top: 4px solid var(--kepco-blue);
+    box-shadow: 0 10px 40px rgba(0,33,79,0.08);
+  }
+  .cta-box h3 {
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--kepco-blue-darker);
+    margin-bottom: 14px;
+    letter-spacing: -0.02em;
+  }
+  .cta-box p {
+    font-size: 16px;
+    color: var(--kepco-gray-500);
+    margin-bottom: 32px;
+  }
+  .cta-box .btn { margin: 0 6px; }
+  .cta-box .btn-primary { background: var(--kepco-blue); color: #fff; }
+  .cta-box .btn-primary:hover { background: var(--kepco-blue-dark); }
+  .cta-box .btn-outline { border-color: var(--kepco-blue); color: var(--kepco-blue); }
+  .cta-box .btn-outline:hover { background: var(--kepco-blue-light); }
+
+  /* ---------- FOOTER ---------- */
+  footer {
+    background: var(--kepco-blue-darker);
+    color: #9fb3d1;
+    padding: 60px 0 28px;
+    font-size: 13px;
+  }
+  .foot-top {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 40px;
+    padding-bottom: 40px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .foot-top .brand h5 {
+    color: #fff;
+    font-size: 18px;
+    margin-bottom: 10px;
+    font-weight: 700;
+  }
+  .foot-top .brand p { font-size: 12px; line-height: 1.8; }
+  .foot-top .col h6 {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    letter-spacing: 0.02em;
+  }
+  .foot-top .col ul {
+    list-style: none;
+  }
+  .foot-top .col li {
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .foot-top .col a:hover { color: #fff; }
+  .foot-bottom {
+    padding-top: 24px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 12px;
+    color: #6e81a0;
+  }
+
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width: 900px) {
+    nav ul { display: none; }
+    .hero h2 { font-size: 34px; }
+    .hero-sub { font-size: 16px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .stat-item { border-right: none; border-bottom: 1px solid var(--border); padding: 16px; }
+    .about-grid, .features-grid, .detail-row, .tech-grid, .sec-grid, .foot-top {
+      grid-template-columns: 1fr !important;
+      gap: 32px;
     }
-    setShowAuthModal(true);
-  }, []);
+    .detail-row.reverse .detail-text { order: 1; }
+    .detail-row.reverse .detail-visual { order: 2; }
+    section.page-section { padding: 60px 0; }
+    .section-head h3 { font-size: 26px; }
+    .cta-box { padding: 40px 24px; }
+    .cta-box h3 { font-size: 22px; }
+    .hero { padding: 60px 0 80px; }
+  }
+`;
+  const bodyHtml = String.raw`
 
-  // Refresh data when project changes
-  useEffect(() => {
-    if (currentProject) {
-      refreshData(currentProject);
-    }
-  }, [currentProject?.id]);
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="container">
+    <span>전력시설 접지관리 디지털 플랫폼</span>
+    <div>
+      <a href="#features">시스템 소개</a>
+      <a href="#security">보안정책</a>
+      <a href="/app" target="_blank" rel="noopener">시스템 접속</a>
+    </div>
+  </div>
+</div>
 
-  const refreshData = useCallback(async (project?: Project | null) => {
-    const proj = project || currentProject;
-    if (!proj) return;
-    try {
-      // Fetch fresh settings from DB
-      const freshSettings = await getProjectSettings(proj.id);
-      if (freshSettings) {
-        const updatedProject = {
-          ...proj,
-          projectName: freshSettings.projectName,
-          constructionSection: freshSettings.constructionSection,
-          lineName: freshSettings.lineName,
-          towerConfigs: freshSettings.towerConfigs || [],
-        };
-        setCurrentProject(updatedProject);
-        // Update session storage
-        const saved = localStorage.getItem(SESSION_KEY);
-        if (saved) {
-          const session = JSON.parse(saved);
-          session.project = updatedProject;
-          localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-        }
-      }
+<!-- HEADER -->
+<header class="main">
+  <div class="container">
+    <a href="#" class="logo">
+      <div class="logo-mark">⚡</div>
+      <div class="logo-text">
+        <h1>접지관리 시스템</h1>
+        <p>GROUNDCHECK · Transmission Line Inspection</p>
+      </div>
+    </a>
+    <nav>
+      <ul>
+        <li><a href="#about">시스템 개요</a></li>
+        <li><a href="#features">주요 기능</a></li>
+        <li><a href="#detail">상세 기능</a></li>
+        <li><a href="#tech">기술 스택</a></li>
+        <li><a href="#security">보안</a></li>
+      </ul>
+    </nav>
+    <a href="/app" target="_blank" rel="noopener" class="header-cta">시스템 접속</a>
+  </div>
+</header>
 
-      // 여러 선로 지원: tower_configs(jsonb)를 LineConfig[]로 정규화
-      const rawConfigs = freshSettings?.towerConfigs ?? proj.towerConfigs;
-      const lineConfigs: LineConfig[] = migrateToLineConfigs(rawConfigs);
+<!-- HERO -->
+<section class="hero">
+  <div class="container">
+    <span class="hero-badge">▸ 154kV 송전선로 접지개소 관리</span>
+    <h2>현장에서 완성하는<br/><span class="accent">전력시설 접지관리</span>의 디지털 전환</h2>
+    <p class="hero-sub">
+      송전선로 건설 현장의 주접지·보조접지 개소를 모바일 환경에서 실시간으로 등록·추적·보고합니다.
+      사진·GPS·이력 데이터를 통합 관리하여 시공 품질과 감리 투명성을 동시에 확보합니다.
+    </p>
 
-      const logs = await getLatestGrounding(Date.now(), proj.id);
-      const regsRes = await fetch('/api/registries?t=' + Date.now() + '&projectId=' + proj.id);
-      const regs = await regsRes.json();
-      setRegistries(regs || []);
+    <div class="hero-project-info">
+      <div class="item">
+        <strong>사업명</strong>
+        <span>154kV 이천-가남 등 2개T/L 용량증대 선종교체공사</span>
+      </div>
+      <div class="item">
+        <strong>공사 구간</strong>
+        <span>이천 S/S ~ 24호 · 27기</span>
+      </div>
+      <div class="item">
+        <strong>선로명</strong>
+        <span>154kV 이천-가남T/L (2회선)</span>
+      </div>
+    </div>
 
-      const builtTowers: Tower[] = [];
-      lineConfigs.forEach(line => {
-        line.towers.forEach((cfg, i) => {
-          builtTowers.push({
-            id: `${line.id}-tower-${i}`,
-            number: cfg.name,
-            name: cfg.name,
-            lineId: line.id,
-            points: buildPoints(line.id, i, logs),
-          });
-        });
-      });
-      setTowers(builtTowers);
+    <div class="hero-buttons">
+      <a href="#features" class="btn btn-primary">주요 기능 살펴보기 →</a>
+      <a href="/app" target="_blank" rel="noopener" class="btn btn-outline">시스템 접속</a>
+    </div>
+  </div>
+</section>
 
-      // 활성 선로가 비었거나 더 이상 존재하지 않으면 첫 선로로 리셋
-      setCurrentLineId(prev => {
-        if (prev && lineConfigs.find(l => l.id === prev)) return prev;
-        return lineConfigs[0]?.id || '';
-      });
-    } catch (e: any) {
-      console.error('Failed to fetch data', e);
-    }
-  }, [currentProject?.id]);
+<!-- STATS -->
+<div class="container">
+  <div class="stats">
+    <div class="stat-item">
+      <div class="num">2</div>
+      <div class="label">회선 동시 관리</div>
+    </div>
+    <div class="stat-item">
+      <div class="num">27</div>
+      <div class="label">철탑 (이천S/S~24호)</div>
+    </div>
+    <div class="stat-item">
+      <div class="num">150</div>
+      <div class="label">총 접지 대상개소</div>
+    </div>
+    <div class="stat-item">
+      <div class="num">PWA</div>
+      <div class="label">모바일 현장 최적화</div>
+    </div>
+  </div>
+</div>
 
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
-  };
+<!-- ABOUT -->
+<section class="page-section about" id="about">
+  <div class="container">
+    <div class="about-grid">
+      <div class="about-text">
+        <h4>SYSTEM OVERVIEW</h4>
+        <h3>송전선로 접지관리,<br/>이제 하나의 시스템에서</h3>
+        <p>
+          접지관리 시스템은 154kV 이천-가남 가공송전선로 설치공사에 특화되어 설계된
+          현장 관리 플랫폼입니다. 철탑별 주접지·보조접지 개소의 설치·철거·면제 상태를
+          A/B/C상 단위로 관리하며, 현장 사진과 GPS 좌표를 결합한 신뢰성 있는 시공 기록을
+          자동으로 생성합니다.
+        </p>
+        <ul>
+          <li>2회선 다중 철탑 환경에 최적화된 데이터 구조</li>
+          <li>현장 작업자 중심의 모바일 우선(PWA) 인터페이스</li>
+          <li>프로젝트 단위 접근제어 및 감리 이력 추적</li>
+          <li>엑셀 기반 보고서 자동 생성 · 감리 제출 즉시 지원</li>
+        </ul>
+      </div>
+      <div class="about-visual">
+        <div class="app-frame">
+          <div class="app-topbar">
+            <div class="app-brand"><div class="app-logo">⚡</div>접지관리 시스템</div>
+            <div class="app-right">
+              한국전력공사 임종화 님 ⚙
+              <div class="app-circuit-tabs"><span class="on">1회선</span><span>2회선</span></div>
+            </div>
+          </div>
+          <div class="app-tabs-row">
+            <div class="app-tab on">📊 대시보드</div>
+            <div class="app-tab">✦ 철탑목록</div>
+          </div>
+          <div class="app-card">
+            <h6>공사 개요</h6>
+            <div class="app-kv"><span class="k">사업명</span><span class="v">154kV 이천-가남 등 2개T/L 용량증대 선종교체공사</span></div>
+            <div class="app-kv"><span class="k">공사구간</span><span class="v">이천S/S ~ 24호</span></div>
+            <div class="app-kv"><span class="k">선로명</span><span class="v">154kV 이천-가남T/L</span></div>
+            <div class="app-kv"><span class="k">총 철탑수</span><span class="v blue">27기</span></div>
+          </div>
+          <div class="app-card">
+            <h6>접지 현황 (1회선)</h6>
+            <div class="app-kv"><span class="k">총 대상개소 (비대상 제외)</span><span class="v">150</span></div>
+            <div class="app-stat-row">
+              <div class="app-stat gray">미등록<div class="num">143</div></div>
+              <div class="app-stat red">접지중<div class="num">3</div></div>
+              <div class="app-stat green">접지철거<div class="num">4</div></div>
+            </div>
+            <div class="app-progress-wrap">
+              <div class="app-progress-label"><span>전체 진척도</span><span class="pct">3%</span></div>
+              <div class="app-progress-bar"><span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
-  // ── Auth handlers ─────────────────────────────────────────────
-  const handleLogin = async () => {
-    setAuthError('');
-    const result = await loginToProject(loginForm.name, loginForm.affiliation, loginForm.projectNumber, loginForm.password);
-    if (!result.success) {
-      setAuthError(result.error || '로그인에 실패했습니다.');
-      return;
-    }
-    setCurrentUser(result.user as User);
-    setCurrentProject(result.project as Project);
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ user: result.user, project: result.project }));
-    setShowAuthModal(false);
-    showToast(`${result.user.name} 님, 환영합니다.`);
-  };
+<!-- FEATURES -->
+<section class="page-section" id="features">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">CORE FEATURES</div>
+      <h3>현장이 요구하는 8가지 핵심 기능</h3>
+      <p>접지 개소의 등록부터 감리 보고서 생성까지, 모든 현장 업무를 하나의 시스템으로 처리합니다.</p>
+    </div>
 
-  const handleAdminAuth = async () => {
-    setAuthError('');
-    if (!adminPassword) {
-      setAuthError('관리자 비밀번호를 입력하세요.');
-      return;
-    }
-    const result = await getAdminProjects(adminPassword);
-    if (!result.success) {
-      setAuthError(result.error || '인증에 실패했습니다.');
-      return;
-    }
-    setAdminProjects(result.data as AdminProject[]);
-    setAdminAuthed(true);
-    setAdminView('list');
-  };
+    <div class="features-grid">
 
-  const refreshAdminProjects = async () => {
-    const result = await getAdminProjects(adminPassword);
-    if (result.success) setAdminProjects(result.data as AdminProject[]);
-  };
+      <div class="feature-card">
+        <div class="feature-icon">🏗️</div>
+        <h4>프로젝트 관리</h4>
+        <p>공사 단위로 프로젝트를 개설하고 관리자·현장 작업자를 역할별로 구분해 접근 권한을 부여합니다.
+           프로젝트 번호와 비밀번호 기반 접근으로 데이터 격리를 보장합니다.</p>
+        <span class="tag">ADMIN · 신규 기능</span>
+      </div>
 
-  const handleDeleteProject = async (projectId: string, projectName: string) => {
-    if (!confirm(`"${projectName}" 사업을 삭제하시겠습니까?\n삭제 후 히스토리에서 복원 가능합니다.`)) return;
-    try {
-      const resp = await deleteProject(adminPassword, projectId);
-      if (resp.success) {
-        await refreshAdminProjects();
-        showToast('사업이 삭제되었습니다.');
-      } else {
-        alert('삭제 실패: ' + resp.error);
-      }
-    } catch (e: any) {
-      alert('삭제 오류: ' + e.message);
-    }
-  };
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h4>접지개소 상태 관리</h4>
+        <p>철탑별 A/B/C상에 대한 주접지·보조접지 설치·철거·면제·미등록 상태를 색상 코드로 직관적으로 표시하여
+           공사 진척도를 한눈에 파악할 수 있습니다.</p>
+        <span class="tag">실시간 · 핵심 기능</span>
+      </div>
 
-  const handleRestoreProject = async (projectId: string, projectName: string) => {
-    try {
-      const resp = await restoreProject(adminPassword, projectId);
-      if (resp.success) {
-        await refreshAdminProjects();
-        showToast(`"${projectName}" 사업이 복원되었습니다.`);
-      } else {
-        alert('복원 실패: ' + resp.error);
-      }
-    } catch (e: any) {
-      alert('복원 오류: ' + e.message);
-    }
-  };
+      <div class="feature-card">
+        <div class="feature-icon">📷</div>
+        <h4>사진 업로드 · EXIF GPS</h4>
+        <p>현장 촬영 사진을 업로드하면 사진 메타데이터(EXIF)에서 GPS 좌표를 자동 추출합니다.
+           EXIF 정보가 없을 경우 브라우저 위치 정보로 좌표를 보완합니다.</p>
+        <span class="tag">자동 추출 · 신규 기능</span>
+      </div>
 
-  const handleCreateProject = async () => {
-    setAuthError('');
-    const result = await createProject(adminPassword, adminForm.projectNumber, adminForm.password, adminForm.projectName);
-    if (!result.success) {
-      setAuthError(result.error || '사업 생성에 실패했습니다.');
-      return;
-    }
-    showToast('사업이 생성되었습니다.');
-    setAdminForm({ projectNumber: '', password: '', projectName: '' });
-    await refreshAdminProjects();
-    setAdminView('list');
-  };
+      <div class="feature-card">
+        <div class="feature-icon">📍</div>
+        <h4>GPS 위치 기록</h4>
+        <p>위도·경도와 위치 정확도(accuracy)를 함께 저장하여 감리 시 설치 위치의 신뢰성을 입증할 수 있으며
+           지도 기반 재조회를 지원합니다.</p>
+        <span class="tag">감리 대응</span>
+      </div>
 
-  const handleEditProject = (p: AdminProject) => {
-    setEditingProjectId(p.id);
-    setEditForm({ projectNumber: p.project_number, password: '' });
-    setAuthError('');
-  };
+      <div class="feature-card">
+        <div class="feature-icon">🕒</div>
+        <h4>이력 추적 · 감리 지원</h4>
+        <p>개소별 모든 상태 변경 이력을 시계열로 기록하고 담당자·소속·타임스탬프를 함께 저장해
+           감리 요청 시 즉시 근거 자료를 제시합니다.</p>
+        <span class="tag">Audit Trail · 신규 기능</span>
+      </div>
 
-  const handleSaveEditProject = async (projectId: string) => {
-    setAuthError('');
-    const result = await updateProjectCredentials(adminPassword, projectId, editForm.projectNumber, editForm.password);
-    if (!result.success) {
-      setAuthError(result.error || '수정에 실패했습니다.');
-      return;
-    }
-    showToast('사업 정보가 수정되었습니다.');
-    setEditingProjectId(null);
-    await refreshAdminProjects();
-  };
+      <div class="feature-card">
+        <div class="feature-icon">📑</div>
+        <h4>문서(대장) 관리</h4>
+        <p>설계도면·시공계획서·감리 문서 등 프로젝트 관련 파일을 업로드·다운로드·삭제할 수 있는
+           통합 문서 저장소를 제공합니다.</p>
+        <span class="tag">Excel · PDF · DOCX</span>
+      </div>
 
-  const handleLogout = () => {
-    localStorage.removeItem(SESSION_KEY);
-    setCurrentUser(null);
-    setCurrentProject(null);
-    setTowers([]);
-    setRegistries([]);
-    setShowAuthModal(true);
-    setLoginForm({ name: '', affiliation: '', projectNumber: '', password: '' });
-    setAuthError('');
-    setAuthTab('login');
-    setAdminAuthed(false);
-  };
+      <div class="feature-card">
+        <div class="feature-icon">⚙️</div>
+        <h4>프로젝트 설정</h4>
+        <p>공사명·공구·선로명 편집, 다중 선로(線路) 생성, 철탑 일괄 등록(단일/범위/Prefix 지정)을 지원하여
+           어떠한 규모의 공사에도 유연하게 대응합니다.</p>
+        <span class="tag">Bulk Insert · 신규 기능</span>
+      </div>
 
-  // ── Stats ──────────────────────────────────────────────────────
-  let totalPoints = 0;
-  let stats = { none: 0, grounding: 0, removed: 0, exempt: 0 };
-  towers.forEach(tower => {
-    if (tower.lineId !== currentLineId) return;
-    tower.points.forEach(pt => {
-      if (pt.circuit === currentCircuit) {
-        if (pt.status in stats) stats[pt.status as keyof typeof stats]++;
-        if (pt.status !== 'exempt') totalPoints++;
-      }
-    });
-  });
-  const progressPct = totalPoints ? Math.round((stats.removed / totalPoints) * 100) : 0;
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h4>엑셀 보고서 자동 생성</h4>
+        <p>상태·회선·개소 필터를 적용한 접지개소 보고서를 XLSX 형식으로 즉시 내보내며,
+           감리 제출용 표준 양식에 맞춰 자동 포맷됩니다.</p>
+        <span class="tag">XLSX Export</span>
+      </div>
 
-  // ── File handlers ──────────────────────────────────────────────
-  const processImageFile = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const objectUrl = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const MAX_DIM = 1000;
-          let { width, height } = img;
-          if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
-          else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
-          const canvas = document.createElement('canvas');
-          canvas.width = width; canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
-          resolve(canvas.toDataURL('image/jpeg', 0.6));
-        } catch (e) {
-          reject(e);
-        } finally {
-          URL.revokeObjectURL(objectUrl);
-        }
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        reject(new Error('이미지를 디코딩할 수 없습니다. 형식을 지원하지 않거나 깨진 파일입니다.'));
-      };
-      img.src = objectUrl;
-    });
-  };
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h4>모바일 PWA 지원</h4>
+        <p>설치형 웹앱(PWA) 방식으로 동작하여 현장에서 홈 화면 아이콘으로 바로 접속할 수 있으며
+           서비스워커로 불안정한 네트워크 환경에서도 안정적으로 작동합니다.</p>
+        <span class="tag">PWA · Service Worker</span>
+      </div>
 
-  // GPS 캡처 진행 상황을 ref로 유지 (closure 문제 회피)
-  const gpsPromiseRef = useRef<Promise<{ latitude: number; longitude: number; accuracy: number | null } | null> | null>(null);
+    </div>
+  </div>
+</section>
 
-  // 브라우저 Geolocation API로 현재 위치 캡처 (EXIF GPS 없을 때 폴백)
-  const captureBrowserGPS = () => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setGpsStatus('unsupported');
-      gpsPromiseRef.current = Promise.resolve(null);
-      return;
-    }
-    setGpsStatus('pending');
-    gpsPromiseRef.current = new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const v = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
-          setPendingGPS(v);
-          setGpsSource('browser');
-          setGpsStatus('ok');
-          resolve(v);
-        },
-        (err) => {
-          console.warn('[GPS]', err);
-          setGpsStatus(err.code === err.PERMISSION_DENIED ? 'denied' : 'error');
-          resolve(null);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
-      );
-    });
-  };
+<!-- DETAILED FEATURES -->
+<section class="page-section detail" id="detail">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">HOW IT WORKS</div>
+      <h3>현장 업무 흐름에 따른 상세 기능</h3>
+      <p>로그인부터 보고서 제출까지, 실제 시공·감리 프로세스를 디지털화한 표준 워크플로우를 제공합니다.</p>
+    </div>
 
-  // 파일 EXIF에서 GPS 추출. 성공하면 state 세팅 후 값 반환, 없으면 null.
-  const extractExifGPS = async (file: File): Promise<{ latitude: number; longitude: number; accuracy: number | null } | null> => {
-    try {
-      const exifr = (await import('exifr')).default;
-      const gps = await exifr.gps(file);
-      if (gps && typeof gps.latitude === 'number' && typeof gps.longitude === 'number') {
-        const v = { latitude: gps.latitude, longitude: gps.longitude, accuracy: null };
-        setPendingGPS(v);
-        setGpsSource('exif');
-        setGpsStatus('ok');
-        gpsPromiseRef.current = Promise.resolve(v);
-        return v;
-      }
-    } catch (e) {
-      console.warn('[EXIF GPS]', e);
-    }
-    return null;
-  };
+    <!-- Step 1 -->
+    <div class="detail-row">
+      <div class="detail-text">
+        <span class="step">STEP 01</span>
+        <h3>프로젝트 기반 안전한 로그인</h3>
+        <p>프로젝트 번호와 비밀번호로 접근하며, 이름·소속을 입력해 작업자를 식별합니다.
+           bcryptjs 기반 암호화로 비밀번호를 안전하게 저장하고, 레거시 평문 비밀번호는 로그인 시점에
+           자동으로 해시되어 업그레이드됩니다.</p>
+        <ul class="detail-list">
+          <li><strong>프로젝트 단위 접근 제어</strong> · 서버 액션마다 userId ↔ projectId 교차 검증</li>
+          <li><strong>관리자 별도 패널</strong> · 프로젝트 생성·수정·삭제·복원 권한 분리</li>
+          <li><strong>세션 영속성</strong> · localStorage 기반 자동 재접속</li>
+        </ul>
+      </div>
+      <div class="detail-visual">
+        <div class="mock-login">
+          <h5>접지관리 시스템 로그인</h5>
+          <div class="mock-field filled">홍길동</div>
+          <div class="mock-field filled">○○감리단</div>
+          <div class="mock-field filled">P-2026-074</div>
+          <div class="mock-field">비밀번호</div>
+          <div class="mock-btn">프로젝트 접속</div>
+        </div>
+      </div>
+    </div>
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    <!-- Step 2 -->
+    <div class="detail-row reverse">
+      <div class="detail-text">
+        <span class="step">STEP 02</span>
+        <h3>회선·철탑별 접지개소 상태 기록</h3>
+        <p>1회선/2회선을 탭으로 전환하며 철탑과 A/B/C상 주접지·보조접지 개소를 선택합니다.
+           각 개소는 설치(grounding)/철거(removed)/면제(exempt)/미등록(none)의 4가지 상태로 구분되며,
+           면제 토글로 해당 개소가 시공 대상이 아님을 명확히 표기합니다.</p>
+        <ul class="detail-list">
+          <li><strong>색상 기반 직관 UI</strong> · 녹색 설치, 적색 철거, 회색 면제</li>
+          <li><strong>4계층 데이터</strong> · 회선 → 철탑 → 상(Phase) → 개소</li>
+          <li><strong>낙관적 업데이트</strong> · 서버 액션으로 즉시 반영</li>
+        </ul>
+      </div>
+      <div class="detail-visual">
+        <div class="app-frame">
+          <div class="app-tower-grid">
+            <div class="app-tower"><div class="tname">이천S/S</div><div class="app-phase-row">
+              <div class="app-phase"><div class="dots"><span class="pdot gray"></span><span class="pdot gray"></span></div>A</div>
+              <div class="app-phase"><div class="dots"><span class="pdot gray"></span><span class="pdot gray"></span></div>B</div>
+              <div class="app-phase"><div class="dots"><span class="pdot gray"></span><span class="pdot gray"></span></div>C</div>
+            </div></div>
+            <div class="app-tower"><div class="tname">1호</div><div class="app-phase-row">
+              <div class="app-phase"><div class="dots"><span class="pdot r"></span><span class="pdot g"></span></div>A</div>
+              <div class="app-phase"><div class="dots"><span class="pdot gray"></span><span class="pdot gray"></span></div>B</div>
+              <div class="app-phase"><div class="dots"><span class="pdot gray"></span><span class="pdot empty"></span></div>C</div>
+            </div></div>
+            <div class="app-tower"><div class="tname">2호</div><div class="app-phase-row">
+              <div class="app-phase"><div class="dots"><span class="pdot g"></span><span class="pdot gray"></span></div>A</div>
+              <div class="app-phase"><div class="dots"><span class="pdot r"></span><span class="pdot gray"></span></div>B</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>C</div>
+            </div></div>
+            <div class="app-tower"><div class="tname">3호</div><div class="app-phase-row">
+              <div class="app-phase"><div class="dots"><span class="pdot g"></span><span class="pdot gray"></span></div>A</div>
+              <div class="app-phase"><div class="dots"><span class="pdot r"></span><span class="pdot empty"></span></div>B</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>C</div>
+            </div></div>
+            <div class="app-tower"><div class="tname">4호</div><div class="app-phase-row">
+              <div class="app-phase"><div class="dots"><span class="pdot g"></span><span class="pdot empty"></span></div>A</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>B</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>C</div>
+            </div></div>
+            <div class="app-tower"><div class="tname">5호</div><div class="app-phase-row">
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>A</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>B</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>C</div>
+            </div></div>
+            <div class="app-tower"><div class="tname">6호</div><div class="app-phase-row">
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>A</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>B</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>C</div>
+            </div></div>
+            <div class="app-tower"><div class="tname">7호</div><div class="app-phase-row">
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>A</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>B</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>C</div>
+            </div></div>
+            <div class="app-tower"><div class="tname">7.1호</div><div class="app-phase-row">
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>A</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>B</div>
+              <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>C</div>
+            </div></div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:10px;justify-content:center;font-size:9.5px;color:#6b7280">
+            <span><span class="pdot g" style="display:inline-block;vertical-align:middle"></span> 철거</span>
+            <span><span class="pdot r" style="display:inline-block;vertical-align:middle"></span> 설치</span>
+            <span><span class="pdot gray" style="display:inline-block;vertical-align:middle"></span> 비대상</span>
+            <span><span class="pdot empty" style="display:inline-block;vertical-align:middle"></span> 미등록</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    setIsLoading(true);
-    setUploadMessage('이미지 처리 중...');
-    setPendingGPS(null);
-    setGpsSource(null);
-    setGpsStatus('idle');
+    <!-- Step 3 -->
+    <div class="detail-row">
+      <div class="detail-text">
+        <span class="step">STEP 03</span>
+        <h3>사진 업로드와 GPS 자동 기록</h3>
+        <p>현장에서 촬영한 사진을 업로드하면 exifr 라이브러리로 사진 내 EXIF GPS 데이터를 자동 추출합니다.
+           EXIF가 없으면 브라우저 Geolocation API를 호출해 보완 좌표를 받아오며, 위치 정확도(accuracy) 값까지
+           함께 저장해 감리 근거의 정확성을 보장합니다.</p>
+        <ul class="detail-list">
+          <li><strong>Vercel Blob 저장</strong> · 대용량 사진 빠른 업로드/배포</li>
+          <li><strong>지연 로딩</strong> · 목록은 썸네일만, 상세 보기에서 원본 로드</li>
+          <li><strong>이중 GPS 소스</strong> · EXIF 우선, 실패 시 브라우저 위치</li>
+        </ul>
+      </div>
+      <div class="detail-visual">
+        <div class="app-modal">
+          <div class="app-modal-head">
+            <div class="app-modal-title">1호 접지상세 (1회선)</div>
+            <div class="app-modal-btn">📋 작업 이력</div>
+          </div>
+          <div class="app-phase-head">A상</div>
+          <div class="app-phase-body">
+            <div class="app-point">
+              <div class="app-point-head"><span>주접지</span><span class="app-badge red">접지중</span></div>
+              <div class="app-point-meta">관리: 한국전력공사 임종화 (2026. 4. 17. 오후 12:43:11)</div>
+              <div class="app-btn-row">
+                <span class="ab">기록보기</span>
+                <span class="ab primary">설치</span>
+                <span class="ab green">철거</span>
+                <span class="ab">비대상</span>
+              </div>
+            </div>
+            <div class="app-point">
+              <div class="app-point-head"><span>보조접지</span><span class="app-badge green">철거완료</span></div>
+              <div class="app-point-meta">관리: 한국전력공사 임종화 (2026. 4. 17. 오후 12:43:46)</div>
+              <div class="app-btn-row">
+                <span class="ab">기록보기</span>
+                <span class="ab primary">설치</span>
+                <span class="ab">비대상</span>
+              </div>
+            </div>
+          </div>
+          <div class="app-phase-head">B상</div>
+          <div class="app-phase-body">
+            <div class="app-point">
+              <div class="app-point-head"><span>주접지</span><span class="app-badge gray">비대상</span></div>
+              <div class="app-point-meta">관리: 한국전력공사 임종화 (2026. 4. 17. 오후 12:43:31)</div>
+              <div class="app-btn-row">
+                <span class="ab">기록보기</span>
+                <span class="ab primary">설치</span>
+                <span class="ab red">비대상 해제</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    // 이미지 처리 + EXIF GPS 추출 병렬 실행
-    const [dataUrl, exifGps] = await Promise.allSettled([
-      processImageFile(file),
-      extractExifGPS(file),
-    ]);
+    <!-- Step 4 -->
+    <div class="detail-row reverse">
+      <div class="detail-text">
+        <span class="step">STEP 04</span>
+        <h3>개소·철탑 이력 타임라인</h3>
+        <p>특정 접지개소의 전체 변경 이력을 사진과 함께 타임라인 형태로 조회할 수 있으며,
+           철탑 단위로는 모든 개소의 작업 이력을 통합해 볼 수 있습니다. 각 이력에는 담당자 이름과
+           소속, 작업 시각이 명확히 기록되어 감리 현장에서 즉각 근거를 제시할 수 있습니다.</p>
+        <ul class="detail-list">
+          <li><strong>개소별 사진 이력 모달</strong> · 사진 변화 추이 즉시 확인</li>
+          <li><strong>철탑 통합 타임라인</strong> · 시공 전체 흐름 파악</li>
+          <li><strong>불변 로그</strong> · 기록 삭제 불가, 상태 추가만 가능</li>
+        </ul>
+      </div>
+      <div class="detail-visual">
+        <div class="app-modal">
+          <div class="app-modal-head">
+            <div class="app-modal-title">1호 작업 이력 타임라인</div>
+            <span style="font-size:14px;color:#9ca3af">✕</span>
+          </div>
+          <div class="app-timeline-item">
+            <div>
+              <div class="line">1회선 · C상 주접지</div>
+              <div class="when">2026. 4. 17. 오후 3:53:54 · 설비보강부 함현신</div>
+            </div>
+            <div class="status gray">비대상 지정</div>
+          </div>
+          <div class="app-timeline-item">
+            <div>
+              <div class="line">1회선 · C상 주접지</div>
+              <div class="when">2026. 4. 17. 오후 3:53:51 · 설비보강부 함현신</div>
+            </div>
+            <div class="status gray">비대상 지정</div>
+          </div>
+          <div class="app-timeline-item">
+            <div>
+              <div class="line">1회선 · A상 보조접지</div>
+              <div class="when">2026. 4. 17. 오후 12:43:46 · 한국전력공사 임종화</div>
+            </div>
+            <div class="status green">접지 철거</div>
+          </div>
+          <div class="app-timeline-item">
+            <div>
+              <div class="line">1회선 · B상 보조접지</div>
+              <div class="when">2026. 4. 17. 오후 12:43:36 · 한국전력공사 임종화</div>
+            </div>
+            <div class="status gray">비대상 지정</div>
+          </div>
+          <div class="app-timeline-item">
+            <div>
+              <div class="line">1회선 · A상 주접지</div>
+              <div class="when">2026. 4. 17. 오후 12:43:11 · 한국전력공사 임종화</div>
+            </div>
+            <div class="status red">접지 설치</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    if (dataUrl.status === 'rejected') {
-      console.error('[handleFileSelect]', dataUrl.reason);
-      alert('이미지 처리 실패: ' + (dataUrl.reason?.message || '알 수 없는 오류'));
-      if (e.target) e.target.value = '';
-      setIsLoading(false);
-      setUploadMessage('');
-      return;
-    }
-    setPendingPhotoPreview(dataUrl.value);
+    <!-- Step 5 -->
+    <div class="detail-row">
+      <div class="detail-text">
+        <span class="step">STEP 05</span>
+        <h3>문서 대장 · 보고서 자동화</h3>
+        <p>시공 관련 문서를 업로드·보관하고 필요 시 다운로드 할 수 있는 프로젝트별 문서 저장소를 제공합니다.
+           또한 접지개소 데이터는 상태·회선 필터를 적용한 Excel 보고서로 즉시 내보내져,
+           감리 제출 양식에 맞춘 표준 리포트를 자동 생성합니다.</p>
+        <ul class="detail-list">
+          <li><strong>멀티 포맷 업로드</strong> · XLSX · PDF · DOCX · 이미지</li>
+          <li><strong>업로더 자동 태깅</strong> · 누가 언제 올렸는지 자동 기록</li>
+          <li><strong>XLSX 표준 보고서</strong> · 감리사 요청 양식 그대로 생성</li>
+        </ul>
+      </div>
+      <div class="detail-visual">
+        <div class="mock-file"><span class="name">154kV_이천가남_시공계획서.pdf</span><span class="date">2026-04-10</span></div>
+        <div class="mock-file"><span class="name">접지저항_측정성적서.xlsx</span><span class="date">2026-04-12</span></div>
+        <div class="mock-file"><span class="name">감리보고서_4월3주차.docx</span><span class="date">2026-04-18</span></div>
+        <div class="mock-file"><span class="name">접지개소_현황_보고서.xlsx</span><span class="date">2026-04-19</span></div>
+        <div class="mock-btn" style="background:var(--kepco-gold);color:var(--kepco-blue-darker);margin-top:14px">📥 보고서 자동 생성 · Excel 다운로드</div>
+      </div>
+    </div>
 
-    // EXIF에 GPS가 없으면 브라우저 위치로 폴백 (non-blocking)
-    if (exifGps.status === 'fulfilled' && !exifGps.value) {
-      captureBrowserGPS();
-    }
+  </div>
+</section>
 
-    setIsLoading(false);
-    setUploadMessage('');
-  };
+<!-- TECH STACK -->
+<section class="page-section tech" id="tech">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">TECH STACK</div>
+      <h3>검증된 기술로 구축된 안정적인 시스템</h3>
+      <p>최신 Next.js App Router와 서버리스 데이터베이스를 기반으로 현장에서 요구되는 빠른 응답성과
+        안정적인 데이터 일관성을 동시에 제공합니다.</p>
+    </div>
 
+    <div class="tech-grid">
+      <div class="tech-card">
+        <div class="tech-name">Next.js 16</div>
+        <div class="tech-desc">App Router · SSR · Server Actions</div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-name">React 19</div>
+        <div class="tech-desc">최신 리액트 · 동시성 렌더링</div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-name">TypeScript</div>
+        <div class="tech-desc">타입 안정성 · 런타임 오류 최소화</div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-name">Tailwind CSS 4</div>
+        <div class="tech-desc">일관된 디자인 · 빠른 UI 구현</div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-name">Neon Postgres</div>
+        <div class="tech-desc">서버리스 DB · 자동 스케일</div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-name">Vercel Blob</div>
+        <div class="tech-desc">사진·문서 대용량 저장</div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-name">exifr · Zod</div>
+        <div class="tech-desc">EXIF 추출 · 입력값 검증</div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-name">PWA · SW</div>
+        <div class="tech-desc">오프라인 · 모바일 설치형</div>
+      </div>
+    </div>
+  </div>
+</section>
 
-  const handlePhotoUpload = async () => {
-    if (!currentUser || !currentProject) return setShowAuthModal(true);
-    if (!uploadTowerId || !selectedPointId || !pendingPhotoPreview) return;
+<!-- SECURITY -->
+<section class="page-section security" id="security">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">SECURITY</div>
+      <h3>공공 전력시설에 적합한 보안 설계</h3>
+      <p>프로젝트 단위 데이터 격리, 암호화, 감사 로그까지 공공 전력 인프라에 요구되는 보안 기준을 충족합니다.</p>
+    </div>
 
-    // 캡처 (state reset 이후에도 쓰기 위해)
-    const targetTowerId = uploadTowerId;
-    const targetPointId = selectedPointId;
-    const newStatus: 'grounding' | 'removed' = uploadType === 'install' ? 'grounding' : 'removed';
-    const photoPreview = pendingPhotoPreview;
+    <div class="sec-grid">
+      <div class="sec-card">
+        <div class="sec-icon">🔐</div>
+        <h4>비밀번호 암호화</h4>
+        <p>bcryptjs 기반 단방향 해시 암호화로 비밀번호를 저장하며, 레거시 평문 비밀번호는
+           로그인 시 자동으로 해시 처리되어 업그레이드됩니다.</p>
+      </div>
+      <div class="sec-card">
+        <div class="sec-icon">🛡️</div>
+        <h4>프로젝트 단위 데이터 격리</h4>
+        <p>모든 서버 액션은 userId와 projectId를 교차 검증하여 타 프로젝트의 데이터가
+           유출·조작되지 않도록 원천 차단합니다.</p>
+      </div>
+      <div class="sec-card">
+        <div class="sec-icon">📝</div>
+        <h4>불변 감사 로그</h4>
+        <p>모든 상태 변경은 누가(user), 언제(timestamp), 무엇을(status) 변경했는지
+           불변 로그로 기록되어 감리 시 완전한 추적성을 보장합니다.</p>
+      </div>
+      <div class="sec-card">
+        <div class="sec-icon">👤</div>
+        <h4>관리자 권한 분리</h4>
+        <p>현장 작업자와 관리자(admin)의 권한을 별도 비밀번호로 분리 운영하여
+           프로젝트 생성·삭제·복원 등 중요한 작업을 통제합니다.</p>
+      </div>
+      <div class="sec-card">
+        <div class="sec-icon">🚫</div>
+        <h4>소프트 삭제</h4>
+        <p>프로젝트 삭제는 deleted_at 플래그 기반의 소프트 삭제로 처리되어
+           관리자가 언제든 복원할 수 있으며, 실수로 인한 데이터 유실을 방지합니다.</p>
+      </div>
+      <div class="sec-card">
+        <div class="sec-icon">✅</div>
+        <h4>Zod 입력 검증</h4>
+        <p>모든 서버 액션의 입력값을 Zod 스키마로 런타임 검증하여
+           악의적 페이로드나 잘못된 데이터 타입으로 인한 오류를 차단합니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-    // GPS 캡처: 이미 성공했으면 그 값 사용. 아직 pending이면 최대 3초 대기.
-    let gps: { latitude: number; longitude: number; accuracy: number | null } | null = pendingGPS;
-    if (!gps && gpsPromiseRef.current) {
-      try {
-        gps = await Promise.race([
-          gpsPromiseRef.current,
-          new Promise<null>(r => setTimeout(() => r(null), 3000)),
-        ]);
-      } catch { gps = null; }
-    }
+<!-- CTA -->
+<section class="cta" id="cta">
+  <div class="container">
+    <div class="cta-box">
+      <h3>현장의 디지털 전환, 지금 시작하세요</h3>
+      <p>프로젝트 번호만 있으면 즉시 접속 가능합니다. 현장에서 모바일로, 사무실에서 PC로.</p>
+      <a href="/app" target="_blank" rel="noopener" class="btn btn-primary">시스템 접속</a>
+      <a href="#features" class="btn btn-outline">기능 다시 보기</a>
+    </div>
+  </div>
+</section>
 
-    setIsLoading(true);
-    setUploadMessage('파일 전송 중...');
-    try {
-      const resp = await uploadGrounding({
-        towerId: targetTowerId,
-        pointId: targetPointId,
-        status: newStatus,
-        photoData: photoPreview,
-        userId: currentUser.id,
-        projectId: currentProject.id,
-        latitude: gps?.latitude ?? null,
-        longitude: gps?.longitude ?? null,
-        locationAccuracy: gps?.accuracy ?? null,
-      });
-      if (resp.success) {
-        // 낙관적 업데이트: refreshData 없이 로컬 state만 갱신
-        setTowers(prev => prev.map(t =>
-          t.id === targetTowerId
-            ? {
-                ...t,
-                points: t.points.map(p =>
-                  p.id === targetPointId
-                    ? {
-                        ...p,
-                        status: newStatus,
-                        history: [{
-                          status: newStatus,
-                          timestamp: Date.now(),
-                          photo: photoPreview,
-                          userName: currentUser.name,
-                          affiliation: currentUser.affiliation,
-                          latitude: gps?.latitude ?? null,
-                          longitude: gps?.longitude ?? null,
-                          locationAccuracy: gps?.accuracy ?? null,
-                        }, ...p.history],
-                      }
-                    : p
-                ),
-              }
-            : t
-        ));
-        setPendingPhotoPreview(null);
-        setSelectedPointId(null);
-        setUploadTowerId(null);
-        setPendingGPS(null);
-        setGpsStatus('idle');
-        setGpsSource(null);
-        showToast('업로드가 완료되었습니다.' + (gps ? ' 📍 위치 기록됨' : ''));
-      } else {
-        alert('업로드 기록 실패: ' + resp.error);
-      }
-    } catch (e: any) {
-      alert('파일 전송 실패: ' + e.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="foot-top">
+      <div class="brand">
+        <h5>⚡ 접지관리 시스템 · Groundcheck</h5>
+        <p>154kV 이천-가남 T/L 가공송전선로 설치공사<br/>
+          주접지 및 보조접지 통합 관리 시스템<br/>
+          Powered by Next.js · TypeScript · Neon Postgres
+        </p>
+      </div>
+      <div class="col">
+        <h6>시스템</h6>
+        <ul>
+          <li><a href="#about">개요</a></li>
+          <li><a href="#features">주요 기능</a></li>
+          <li><a href="#detail">상세 기능</a></li>
+          <li><a href="#tech">기술 스택</a></li>
+        </ul>
+      </div>
+      <div class="col">
+        <h6>보안·정책</h6>
+        <ul>
+          <li><a href="#security">보안 설계</a></li>
+          <li><a href="#">개인정보 처리방침</a></li>
+          <li><a href="#">이용 약관</a></li>
+        </ul>
+      </div>
+      <div class="col">
+        <h6>지원</h6>
+        <ul>
+          <li><a href="/app" target="_blank" rel="noopener">시스템 접속</a></li>
+          <li><a href="#">현장 매뉴얼</a></li>
+          <li><a href="#">문의하기</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <div>© 2026 Groundcheck. 154kV 이천─가남 T/L 접지관리 시스템. All Rights Reserved.</div>
+      <div>Build: Next.js 16 · React 19 · Neon Postgres</div>
+    </div>
+  </div>
+</footer>
 
-  const handleRegistryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!currentUser || !currentProject) return setShowAuthModal(true);
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const title = prompt('접지관리대장 제목을 입력하세요');
-    if (!title) { if (e.target) e.target.value = ''; return; }
-    setIsLoading(true);
-    setUploadMessage('파일 전송 중...');
-    const isImage = file.type.startsWith('image/');
-    const processAndUpload = async (fileData: string) => {
-      if (fileData.length > 2500000) {
-        alert('파일이 너무 큽니다. 이미지는 자동 압축되며, 기타 파일은 2MB 이하로 올려주세요.');
-        setIsLoading(false);
-        if (e.target) e.target.value = '';
-        return;
-      }
-      try {
-        const resp = await uploadRegistry(title, fileData, currentUser!.id, currentProject!.id);
-        if (resp.success) { await refreshData(); showToast('대장이 성공적으로 등록되었습니다.'); }
-        else alert('대장 기록 실패: ' + resp.error);
-      } catch (err: any) {
-        alert('대장 파일 업로드 에러: ' + err.message);
-      } finally {
-        setIsLoading(false);
-        if (e.target) e.target.value = '';
-      }
-    };
-    if (isImage) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const MAX_DIM = 1200;
-          let { width, height } = img;
-          if (width > height) { if (width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; } }
-          else { if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; } }
-          const canvas = document.createElement('canvas');
-          canvas.width = width; canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) { ctx.fillStyle = 'white'; ctx.fillRect(0, 0, width, height); ctx.drawImage(img, 0, 0, width, height); }
-          processAndUpload(canvas.toDataURL('image/jpeg', 0.7));
-        };
-      };
-      reader.readAsDataURL(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = (event) => processAndUpload(event.target?.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const toggleExempt = async (tId: string, pId: string, currentStatus: string) => {
-    if (!currentUser || !currentProject) return setShowAuthModal(true);
-    // 안내 confirm 제거
-    const makeExempt = currentStatus !== 'exempt';
-    const newStatus: 'exempt' | 'none' = makeExempt ? 'exempt' : 'none';
-    setIsLoading(true);
-    try {
-      const resp = await togglePointExempt(tId, pId, currentUser.id, makeExempt, currentProject.id);
-      if (resp.success) {
-        // 낙관적 업데이트: 해당 포인트만 상태 변경
-        setTowers(prev => prev.map(t =>
-          t.id === tId
-            ? {
-                ...t,
-                points: t.points.map(p =>
-                  p.id === pId ? { ...p, status: newStatus } : p
-                ),
-              }
-            : t
-        ));
-      } else {
-        alert('실패: ' + resp.error);
-      }
-    } catch (e: any) {
-      alert('전환 에러: ' + e.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 보고서 Excel 다운로드: 모든 선로 × 철탑 × 회선 × 상 × 주/보접지 포인트 기준.
-  const handleExportReport = async () => {
-    if (!currentProject) return;
-    if (exportingReport) return;
-    setExportingReport(true);
-    try {
-      const lineConfigs: LineConfig[] = migrateToLineConfigs(currentProject.towerConfigs);
-      const lineNameById = new Map(lineConfigs.map(l => [l.id, l.name]));
-      const rows: any[] = [];
-      const statusKor: Record<string, string> = {
-        none: '미등록', grounding: '접지중', removed: '철거완료', exempt: '비대상',
-      };
-      for (const t of towers) {
-        for (const pt of t.points) {
-          const latest = pt.history[0];
-          rows.push({
-            '선로명': lineNameById.get(t.lineId) || '',
-            '철탑번호': t.name,
-            '회선': pt.circuit,
-            '상': pt.phase.toUpperCase(),
-            '접지구분': pt.groundingType === 'main' ? '주접지' : '보조접지',
-            '상태': statusKor[pt.status] || pt.status,
-            '작업자': latest?.userName || '',
-            '소속': latest?.affiliation || '',
-            '작업일시': latest ? new Date(latest.timestamp).toLocaleString() : '',
-            '위도': latest?.latitude ?? '',
-            '경도': latest?.longitude ?? '',
-            '정확도(m)': latest?.locationAccuracy != null ? Math.round(latest.locationAccuracy) : '',
-          });
-        }
-      }
-      const ws = XLSX.utils.json_to_sheet(rows);
-      // 컬럼 폭 보정
-      ws['!cols'] = [
-        { wch: 14 }, { wch: 10 }, { wch: 5 }, { wch: 4 }, { wch: 8 },
-        { wch: 9 }, { wch: 10 }, { wch: 12 }, { wch: 20 },
-        { wch: 11 }, { wch: 11 }, { wch: 9 },
-      ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '접지현황');
-      const today = new Date().toISOString().slice(0, 10);
-      const safeName = (currentProject.projectName || currentProject.projectNumber || 'project').replace(/[\\/:*?"<>|]/g, '_');
-      XLSX.writeFile(wb, `${safeName}_접지현황_${today}.xlsx`);
-      showToast('보고서가 다운로드되었습니다.');
-    } catch (e: any) {
-      alert('보고서 생성 실패: ' + (e?.message || e));
-    } finally {
-      setExportingReport(false);
-    }
-  };
-
-  const getTowerOverallStatus = (tower: Tower) => {
-    const points = tower.points.filter(p => p.circuit === currentCircuit);
-    const groundingCnt = points.filter(p => p.status === 'grounding').length;
-    const removedCnt = points.filter(p => p.status === 'removed').length;
-    const exemptCnt = points.filter(p => p.status === 'exempt').length;
-    const total = points.length;
-    if (exemptCnt === total && total > 0) return 'exempt';
-    if (removedCnt + exemptCnt === total && removedCnt > 0) return 'removed';
-    if (groundingCnt > 0 || removedCnt > 0) return 'grounding';
-    return 'none';
-  };
-
-  const selectedTower = towers.find(t => t.id === selectedTowerId);
-
-  // ── Settings handlers ──────────────────────────────────────────
-
-  const openSettings = () => {
-    if (!currentProject) return;
-    setSettingsDraft({
-      projectName: currentProject.projectName,
-      constructionSection: currentProject.constructionSection,
-      lineName: currentProject.lineName,
-    });
-    const lineConfigs = migrateToLineConfigs(currentProject.towerConfigs);
-    // 깊은 복사 후 세팅
-    setLineConfigsDraft(lineConfigs.map(l => ({
-      id: l.id,
-      name: l.name,
-      towers: l.towers.map(t => ({ ...t })),
-    })));
-    const activeId = currentLineId && lineConfigs.find(l => l.id === currentLineId)
-      ? currentLineId
-      : lineConfigs[0].id;
-    setSettingsLineId(activeId);
-    setNewLineName('');
-    setSettingsError('');
-    setSettingsTab('project');
-    setGenStart('');
-    setGenEnd('');
-    setGenPrefix('');
-    setGenSuffix('호');
-    setInsertAfterIdx(null);
-    setInsertStartNum('');
-    setInsertEndNum('');
-    setInsertSingleName('');
-    setInsertMode('single');
-    setShowSettings(true);
-  };
-
-  const saveSettings = async () => {
-    if (!currentProject) return;
-    setIsLoading(true);
-    try {
-      const resp = await saveProjectSettings(currentProject.id, currentUser!.id, settingsDraft, lineConfigsDraft);
-      if (resp.success) {
-        setShowSettings(false);
-        await refreshData();
-        showToast('설정이 저장되었습니다.');
-      } else {
-        alert('설정 저장 실패: ' + resp.error);
-      }
-    } catch (e: any) {
-      alert('설정 저장 에러: ' + e.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGenerateTowerList = () => {
-    setSettingsError('');
-    const s = parseInt(genStart, 10);
-    const e = parseInt(genEnd, 10);
-    if (isNaN(s) || isNaN(e) || s > e) {
-      setSettingsError('올바른 시점/종점 번호를 입력하세요.');
-      return;
-    }
-    const newList: TowerConfig[] = [];
-    for (let i = s; i <= e; i++) {
-      newList.push({ name: `${genPrefix}${i}${genSuffix}` });
-    }
-    setTowerConfigsDraft(newList);
-  };
-
-  const handleInsertTowers = (afterIdx: number) => {
-    setSettingsError('');
-    const existingNames = towerConfigsDraft.map(t => t.name);
-    const toInsert: TowerConfig[] = [];
-
-    if (insertMode === 'single') {
-      const name = insertSingleName.trim();
-      if (!name) {
-        setSettingsError('철탑명을 입력하세요.');
-        return;
-      }
-      if (existingNames.includes(name)) {
-        setSettingsError(`중복 오류: "${name}"은 이미 목록에 있습니다.`);
-        return;
-      }
-      toInsert.push({ name });
-    } else {
-      const s = parseInt(insertStartNum, 10);
-      const e = parseInt(insertEndNum, 10);
-      if (isNaN(s) || isNaN(e) || s > e) {
-        setSettingsError('올바른 삽입 번호를 입력하세요.');
-        return;
-      }
-      for (let i = s; i <= e; i++) {
-        const name = `${i}호`;
-        if (existingNames.includes(name)) {
-          setSettingsError(`중복 오류: "${name}"은 이미 목록에 있습니다.`);
-          return;
-        }
-        toInsert.push({ name });
-      }
-    }
-
-    const updated = [...towerConfigsDraft];
-    updated.splice(afterIdx + 1, 0, ...toInsert);
-    setTowerConfigsDraft(updated);
-    setInsertAfterIdx(null);
-    setInsertStartNum('');
-    setInsertEndNum('');
-    setInsertSingleName('');
-  };
-
-  const handleRemoveTower = (idx: number) => {
-    const tower = towers.find(t => t.id === `${settingsLineId}-tower-${idx}`);
-    if (tower) {
-      const hasPhoto = tower.points.some(p => p.history.length > 0);
-      const hasExempt = tower.points.some(p => p.status === 'exempt');
-      if (hasPhoto) {
-        setSettingsError(`삭제 불가: "${tower.name}"에 이미 업로드된 사진이 있습니다.`);
-        return;
-      }
-      if (hasExempt) {
-        setSettingsError(`삭제 불가: "${tower.name}"에 비대상으로 선택된 접지점이 있습니다.`);
-        return;
-      }
-    }
-    setSettingsError('');
-    setTowerConfigsDraft(prev => prev.filter((_, i) => i !== idx));
-  };
-
+`;
   return (
     <>
-      <header id="app-header">
-        <div className="header-content">
-          <div className="header-left">
-            <svg className="logo-icon-svg" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <div className="header-text">
-              <h1 id="main-title">접지관리 시스템</h1>
-            </div>
-          </div>
-          <div className="header-right">
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-              {currentUser && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--primary)' }}>{currentUser.affiliation} {currentUser.name} 님</span>
-                  <button
-                    id="settings-btn"
-                    onClick={openSettings}
-                    title="설정"
-                    style={{
-                      background: 'rgba(0,0,0,0.05)',
-                      border: 'none',
-                      borderRadius: '0.6rem',
-                      padding: '0.35rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-muted)',
-                      transition: 'background 0.2s',
-                    }}
-                  >
-                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-              <div className="circuit-toggle">
-                <button className={`circuit-btn ${currentCircuit === 1 ? 'active' : ''}`} onClick={() => setCurrentCircuit(1)}>1회선</button>
-                <button className={`circuit-btn ${currentCircuit === 2 ? 'active' : ''}`} onClick={() => setCurrentCircuit(2)}>2회선</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <nav className="top-nav">
-        <button className={`nav-btn ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => setCurrentView('dashboard')}>
-          <svg style={{ width: '1.5rem', height: '1.5rem', marginRight: '0.5rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-          <span className="btn-label">대시보드</span>
-        </button>
-        <button className={`nav-btn ${currentView === 'towers' ? 'active' : ''}`} onClick={() => setCurrentView('towers')}>
-          <svg style={{ width: '1.5rem', height: '1.5rem', marginRight: '0.5rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-          <span className="btn-label">철탑목록</span>
-        </button>
-      </nav>
-
-      {currentView === 'dashboard' ? (
-        <section className="view active">
-          <div className="dashboard-container">
-            {/* 선로 선택 */}
-            {(() => {
-              const lineConfigs: LineConfig[] = migrateToLineConfigs(currentProject?.towerConfigs);
-              if (lineConfigs.length <= 1) return null;
-              return (
-                <div className="glass-card" style={{ padding: '0.9rem 1rem', marginBottom: '0.9rem', background: 'white' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>선로 선택</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                    {lineConfigs.map(l => (
-                      <button key={l.id} onClick={() => setCurrentLineId(l.id)}
-                        style={{
-                          padding: '0.4rem 0.85rem',
-                          border: `1px solid ${currentLineId === l.id ? 'var(--primary)' : 'var(--border-color)'}`,
-                          borderRadius: 999,
-                          background: currentLineId === l.id ? 'var(--primary)' : 'white',
-                          color: currentLineId === l.id ? 'white' : 'var(--text-main)',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                        }}>
-                        {l.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-            {/* 공사 개요 */}
-            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem', background: 'white' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>공사 개요</h2>
-              </div>
-              <div style={{ fontSize: '0.9rem' }}>
-                <div style={{ marginBottom: '1rem' }}>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>사업명</span>
-                  <span style={{ fontWeight: 600 }}>{currentProject?.projectName || '-'}</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>공사구간</span>
-                    <span style={{ fontWeight: 600 }}>{currentProject?.constructionSection || '-'}</span>
-                  </div>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>선로명</span>
-                    <span style={{ fontWeight: 600 }}>{
-                      migrateToLineConfigs(currentProject?.towerConfigs).find(l => l.id === currentLineId)?.name
-                      || currentProject?.lineName || '-'
-                    }</span>
-                  </div>
-                </div>
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>총 철탑수</span>
-                  <span style={{ fontWeight: 800, color: 'var(--primary)' }}>{towers.filter(t => t.lineId === currentLineId).length}기</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 접지 현황 */}
-            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>접지 현황 ({currentCircuit}회선)</h3>
-                <button
-                  onClick={handleExportReport}
-                  disabled={exportingReport || towers.length === 0}
-                  style={{
-                    padding: '0.4rem 0.8rem',
-                    background: exportingReport ? '#e5e7eb' : '#10b981',
-                    color: 'white', border: 'none', borderRadius: 8,
-                    fontSize: '0.8rem', fontWeight: 600,
-                    cursor: exportingReport || towers.length === 0 ? 'not-allowed' : 'pointer',
-                    opacity: towers.length === 0 ? 0.5 : 1,
-                  }}
-                >
-                  {exportingReport ? '생성 중...' : '📊 보고서 다운로드'}
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: '#f8fafc', borderRadius: 12 }}>
-                  <span>총 대상개소 <small>(비대상 제외)</small></span>
-                  <span style={{ fontWeight: 'bold' }}>{totalPoints}</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-                  <div style={{ textAlign: 'center', padding: '0.5rem', background: '#f1f5f9', borderRadius: 8 }}>
-                    <div style={{ fontSize: '0.7rem' }}>미등록</div>
-                    <div style={{ fontWeight: 700 }}>{stats.none}</div>
-                  </div>
-                  <div style={{ textAlign: 'center', padding: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: 8, color: 'var(--status-grounding)' }}>
-                    <div style={{ fontSize: '0.7rem' }}>접지중</div>
-                    <div style={{ fontWeight: 700 }}>{stats.grounding}</div>
-                  </div>
-                  <div style={{ textAlign: 'center', padding: '0.5rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: 8, color: 'var(--status-removed)' }}>
-                    <div style={{ fontSize: '0.7rem' }}>접지철거</div>
-                    <div style={{ fontWeight: 700 }}>{stats.removed}</div>
-                  </div>
-                </div>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
-                    <span style={{ fontWeight: 600 }}>전체 진척도</span>
-                    <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{progressPct}%</span>
-                  </div>
-                  <div className="progress-track"><div className="progress-fill secondary" style={{ width: `${progressPct}%` }} /></div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem', textAlign: 'right' }}>
-                    검산식: 접지철거({stats.removed}) ÷ 전체대상({totalPoints}) × 100
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 접지관리대장 */}
-            <div className="glass-card" style={{ padding: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <svg style={{ width: '1.25rem', height: '1.25rem', color: 'var(--primary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                  접지관리대장
-                </h3>
-                <button className="photo-btn primary" onClick={() => document.getElementById('reg-in')?.click()} disabled={isLoading}>
-                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: '1rem', height: '1rem' }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                  파일 업로드
-                </button>
-                <input id="reg-in" type="file" onClick={(e) => { (e.target as any).value = ''; }} onChange={handleRegistryUpload} style={{ display: 'none' }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {registries.map(reg => (
-                  <div key={reg.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600 }}>{reg.title}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{reg.user_name} | {new Date(reg.created_at).toLocaleDateString()}</div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button className="photo-btn" onClick={async () => {
-                        try {
-                          setIsLoading(true);
-                          const dataUrl = await getRegistryData(reg.id, currentProject!.id);
-                          if (!dataUrl) { alert('데이터가 없습니다.'); return; }
-                          const [header, base64Data] = dataUrl.split(',');
-                          const mimeMatch = header.match(/:(.*?);/);
-                          const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
-                          const byteChars = atob(base64Data);
-                          const byteArr = new Uint8Array(byteChars.length);
-                          for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-                          const blob = new Blob([byteArr], { type: mimeType });
-                          const blobUrl = URL.createObjectURL(blob);
-                          const link = document.createElement('a');
-                          link.href = blobUrl; link.download = reg.title;
-                          document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                        } catch (e: any) { alert('열기 실패: ' + e.message); }
-                        finally { setIsLoading(false); }
-                      }} style={{ fontSize: '0.75rem' }}>열기</button>
-                      <button className="photo-btn danger" onClick={async () => {
-                        if (confirm('삭제하시겠습니까?')) {
-                          try { await deleteRegistry(reg.id, currentProject!.id); refreshData(); } catch (e: any) { alert('오류: ' + e.message); }
-                        }
-                      }} style={{ padding: '4px 8px' }}>🗑️</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-      ) : (
-        <section className="view active">
-          <div className="towers-container">
-            {/* 선로 선택 */}
-            {(() => {
-              const lineConfigs: LineConfig[] = migrateToLineConfigs(currentProject?.towerConfigs);
-              if (lineConfigs.length <= 1) return null;
-              return (
-                <div className="glass-card" style={{ padding: '0.8rem 1rem', marginBottom: '0.9rem', background: 'white' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>선로 선택</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                    {lineConfigs.map(l => (
-                      <button key={l.id} onClick={() => setCurrentLineId(l.id)}
-                        style={{
-                          padding: '0.4rem 0.85rem',
-                          border: `1px solid ${currentLineId === l.id ? 'var(--primary)' : 'var(--border-color)'}`,
-                          borderRadius: 999,
-                          background: currentLineId === l.id ? 'var(--primary)' : 'white',
-                          color: currentLineId === l.id ? 'white' : 'var(--text-main)',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                        }}>
-                        {l.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-            <div className="tower-list">
-              {towers.filter(t => t.lineId === currentLineId).map(tower => {
-                const circuitPoints = tower.points.filter(p => p.circuit === currentCircuit);
-                return (
-                  <div key={tower.id} className="tower-item glass-card" onClick={() => setSelectedTowerId(tower.id)}>
-                    <div className="tower-number">{tower.name}</div>
-                    {/* A/B/C 3상 × 주/보 2개 = 6개 dot, 상별로 묶음 */}
-                    <div className="status-dots" style={{ display: 'flex', gap: '0.5rem' }}>
-                      {(['a', 'b', 'c'] as const).map(phase => {
-                        const main = circuitPoints.find(p => p.phase === phase && p.groundingType === 'main');
-                        const sub  = circuitPoints.find(p => p.phase === phase && p.groundingType === 'sub');
-                        const renderDot = (p: typeof main, title: string) => {
-                          if (p?.status === 'exempt') {
-                            return (
-                              <span title={title} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 10, height: 10, fontSize: '0.65rem', fontWeight: 900, color: '#94a3b8', lineHeight: 1 }}>✕</span>
-                            );
-                          }
-                          const cls = p?.status === 'grounding' ? 'grounding' : p?.status === 'removed' ? 'removed' : '';
-                          return <div className={`status-circle ${cls}`} title={title} />;
-                        };
-                        return (
-                          <div key={phase} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                              {renderDot(main, `${phase.toUpperCase()}상 주접지`)}
-                              {renderDot(sub,  `${phase.toUpperCase()}상 보조접지`)}
-                            </div>
-                            <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontWeight: 700 }}>{phase.toUpperCase()}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── Auth Modal ── */}
-      {showAuthModal && (
-        <div className="modal-overlay active">
-          <div className="modal-content glass-card" style={{ maxWidth: 420, margin: 'auto' }}>
-            <div className="modal-header">
-              <h2>접지관리 시스템</h2>
-            </div>
-
-            {/* Tab navigation */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', padding: '0 1.25rem' }}>
-              {(['login', 'admin'] as const).map(tab => (
-                <button key={tab} onClick={() => { setAuthError(''); setAuthTab(tab); setAdminAuthed(false); }}
-                  style={{
-                    flex: 1, padding: '0.75rem', border: 'none', background: 'none', cursor: 'pointer',
-                    fontWeight: 700, fontSize: '0.9rem',
-                    color: authTab === tab ? 'var(--primary)' : 'var(--text-muted)',
-                    borderBottom: authTab === tab ? '2px solid var(--primary)' : '2px solid transparent',
-                    transition: 'all 0.2s',
-                  }}>
-                  {tab === 'login' ? '로그인' : '사업 생성 (관리자)'}
-                </button>
-              ))}
-            </div>
-
-            <div className="modal-body" style={{ padding: '1.25rem' }}>
-              {authError && (
-                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '0.75rem', color: '#ef4444', fontSize: '0.85rem', fontWeight: 600, marginBottom: '1rem' }}>
-                  {authError}
-                </div>
-              )}
-
-              {authTab === 'login' ? (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div>
-                      <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>소속</label>
-                      <input type="text" placeholder="소속을 입력하세요" value={loginForm.affiliation}
-                        onChange={e => setLoginForm({ ...loginForm, affiliation: e.target.value })}
-                        style={{ padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>이름</label>
-                      <input type="text" placeholder="이름을 입력하세요" value={loginForm.name}
-                        onChange={e => setLoginForm({ ...loginForm, name: e.target.value })}
-                        style={{ padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>사업번호</label>
-                      <input type="text" placeholder="사업번호를 입력하세요" value={loginForm.projectNumber}
-                        onChange={e => setLoginForm({ ...loginForm, projectNumber: e.target.value })}
-                        style={{ padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>비밀번호</label>
-                      <input type="password" placeholder="비밀번호를 입력하세요" value={loginForm.password}
-                        onChange={e => setLoginForm({ ...loginForm, password: e.target.value })}
-                        onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                        style={{ padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }} />
-                    </div>
-                  </div>
-                  <button className="btn-upload" style={{ width: '100%', marginTop: '1.25rem' }} onClick={handleLogin}>로그인</button>
-                </>
-              ) : (
-                <>
-                  {!adminAuthed ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.5rem 0' }}>
-                        관리자 비밀번호를 입력하세요.
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>관리자 비밀번호</label>
-                        <input type="password" placeholder="관리자 비밀번호" value={adminPassword}
-                          onChange={e => setAdminPassword(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && handleAdminAuth()}
-                          style={{ padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }} />
-                      </div>
-                      <button className="btn-upload" style={{ width: '100%' }} onClick={handleAdminAuth}>인증</button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* 관리자 서브 탭 */}
-                      <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '1rem' }}>
-                        {(['list', 'create'] as const).map(v => (
-                          <button key={v} onClick={() => { setAuthError(''); setAdminView(v); }}
-                            style={{
-                              flex: 1, padding: '0.6rem', border: 'none', background: 'none', cursor: 'pointer',
-                              fontWeight: 700, fontSize: '0.85rem',
-                              color: adminView === v ? 'var(--primary)' : 'var(--text-muted)',
-                              borderBottom: adminView === v ? '2px solid var(--primary)' : '2px solid transparent',
-                            }}>
-                            {v === 'list' ? `사업 목록 (${adminProjects.length})` : '새 사업 생성'}
-                          </button>
-                        ))}
-                      </div>
-
-                      {adminView === 'create' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                          <div>
-                            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>사업번호</label>
-                            <input type="text" placeholder="사업번호 (로그인 시 사용)" value={adminForm.projectNumber}
-                              onChange={e => setAdminForm({ ...adminForm, projectNumber: e.target.value })}
-                              style={{ padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }} />
-                          </div>
-                          <div>
-                            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>비밀번호</label>
-                            <input type="password" placeholder="비밀번호 (로그인 시 사용)" value={adminForm.password}
-                              onChange={e => setAdminForm({ ...adminForm, password: e.target.value })}
-                              style={{ padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }} />
-                          </div>
-                          <div>
-                            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>사업명</label>
-                            <input type="text" placeholder="사업명을 입력하세요" value={adminForm.projectName}
-                              onChange={e => setAdminForm({ ...adminForm, projectName: e.target.value })}
-                              onKeyDown={e => e.key === 'Enter' && handleCreateProject()}
-                              style={{ padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, width: '100%', fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }} />
-                          </div>
-                          <button className="btn-upload" style={{ width: '100%' }} onClick={handleCreateProject}>사업 생성</button>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '380px', overflowY: 'auto' }}>
-                          {adminProjects.length === 0 && (
-                            <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0', fontSize: '0.85rem' }}>생성된 사업이 없습니다.</div>
-                          )}
-                          {/* 활성 사업 */}
-                          {adminProjects.filter(p => !p.deleted_at).map(p => (
-                            <div key={p.id} style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: 10, border: editingProjectId === p.id ? '1px solid var(--primary)' : '1px solid var(--border-color)' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div>
-                                  <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{p.project_name}</div>
-                                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>번호: {p.project_number} · {new Date(p.created_at).toLocaleDateString()}</div>
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                  <button onClick={() => editingProjectId === p.id ? setEditingProjectId(null) : handleEditProject(p)}
-                                    style={{ padding: '0.25rem 0.6rem', background: editingProjectId === p.id ? '#e0e7ff' : '#f1f5f9', color: editingProjectId === p.id ? 'var(--primary)' : '#64748b', border: 'none', borderRadius: 6, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                    {editingProjectId === p.id ? '닫기' : '수정'}
-                                  </button>
-                                  <button onClick={() => handleDeleteProject(p.id, p.project_name)}
-                                    style={{ padding: '0.25rem 0.6rem', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 6, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                    삭제
-                                  </button>
-                                </div>
-                              </div>
-                              {editingProjectId === p.id && (
-                                <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
-                                  <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>사업번호</label>
-                                    <input
-                                      type="text"
-                                      value={editForm.projectNumber}
-                                      onChange={e => setEditForm({ ...editForm, projectNumber: e.target.value })}
-                                      style={{ padding: '0.5rem 0.65rem', border: '1px solid var(--border-color)', borderRadius: 7, width: '100%', fontSize: '0.85rem', fontFamily: 'var(--font-sans)', boxSizing: 'border-box' }}
-                                    />
-                                  </div>
-                                  <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>새 비밀번호 <span style={{ fontWeight: 400 }}>(비워두면 변경 안 함)</span></label>
-                                    <input
-                                      type="password"
-                                      placeholder="변경할 비밀번호 입력"
-                                      value={editForm.password}
-                                      onChange={e => setEditForm({ ...editForm, password: e.target.value })}
-                                      style={{ padding: '0.5rem 0.65rem', border: '1px solid var(--border-color)', borderRadius: 7, width: '100%', fontSize: '0.85rem', fontFamily: 'var(--font-sans)', boxSizing: 'border-box' }}
-                                    />
-                                  </div>
-                                  <button onClick={() => handleSaveEditProject(p.id)}
-                                    style={{ padding: '0.45rem', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 7, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
-                                    저장
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                          {/* 삭제된 사업 히스토리 */}
-                          {adminProjects.some(p => p.deleted_at) && (
-                            <>
-                              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginTop: '0.5rem', padding: '0.25rem 0', borderTop: '1px dashed var(--border-color)' }}>
-                                삭제된 사업 (히스토리)
-                              </div>
-                              {adminProjects.filter(p => p.deleted_at).map(p => (
-                                <div key={p.id} style={{ padding: '0.75rem', background: '#fef2f2', borderRadius: 10, border: '1px solid #fecaca', opacity: 0.85 }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div>
-                                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#ef4444', textDecoration: 'line-through' }}>{p.project_name}</div>
-                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>번호: {p.project_number} · 삭제: {new Date(p.deleted_at!).toLocaleDateString()}</div>
-                                    </div>
-                                    <button onClick={() => handleRestoreProject(p.id, p.project_name)}
-                                      style={{ padding: '0.25rem 0.6rem', background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid #10b981', borderRadius: 6, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                      복원
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Detail Modal ── */}
-      {selectedTower && (
-        <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && !selectedPointId && setSelectedTowerId(null)}>
-          <div className="modal-content glass-card">
-            <div className="modal-header">
-              <h2>{selectedTower.name} 접지상세 ({currentCircuit}회선)</h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button
-                  onClick={async () => {
-                    if (!currentProject) return;
-                    setTimelineTowerId(selectedTower.id);
-                    setTimelineData(null);
-                    setTimelineLoading(true);
-                    try {
-                      const rows = await getTowerHistory(selectedTower.id, currentProject.id);
-                      setTimelineData((rows as any[]).map(r => ({
-                        status: r.status,
-                        timestamp: new Date(r.created_at).getTime(),
-                        photo: '',
-                        userName: r.user_name,
-                        affiliation: r.affiliation,
-                        latitude: r.latitude ?? null,
-                        longitude: r.longitude ?? null,
-                        locationAccuracy: r.location_accuracy ?? null,
-                        pointId: r.point_id,
-                      })));
-                    } catch { setTimelineData([]); }
-                    finally { setTimelineLoading(false); }
-                  }}
-                  style={{ padding: '0.35rem 0.75rem', background: '#eff6ff', color: 'var(--primary)', border: '1px solid #bfdbfe', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  📋 작업 이력
-                </button>
-                <button className="modal-close" onClick={() => setSelectedTowerId(null)}>✕</button>
-              </div>
-            </div>
-            <div className="modal-body">
-              {/* A/B/C 각 상별 섹션 → 상 안에 주접지·보조접지 행 */}
-              {(['a', 'b', 'c'] as const).map(phase => {
-                const phasePoints = selectedTower.points.filter(
-                  p => p.circuit === currentCircuit && p.phase === phase
-                );
-                return (
-                  /* .point-section 재사용 금지 — 배경/테두리 충돌 방지 */
-                  <div key={phase} style={{ marginBottom: '1.1rem', borderRadius: 12, border: '2px solid var(--primary)', overflow: 'hidden' }}>
-                    {/* 상 헤더 */}
-                    <div style={{ background: 'var(--primary)', color: 'white', fontWeight: 800, fontSize: '0.95rem', padding: '0.5rem 0.9rem' }}>
-                      {phase.toUpperCase()}상
-                    </div>
-                    <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', background: 'white' }}>
-                      {phasePoints.map(pt => {
-                        const latest = pt.history[0];
-                        const isMain = pt.groundingType === 'main';
-                        const typeLabel = isMain ? '주접지' : '보조접지';
-                        return (
-                          <div key={pt.id} style={{
-                            padding: '0.7rem 0.85rem',
-                            background: isMain ? '#eff6ff' : '#f8fafc',
-                            borderRadius: 9,
-                            border: `1px solid ${isMain ? '#bfdbfe' : 'var(--border-color)'}`,
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                              <span style={{ fontWeight: 700, fontSize: '0.9rem', color: isMain ? 'var(--primary)' : 'var(--text-main)' }}>
-                                {typeLabel}
-                              </span>
-                              <span className={`status-badge ${pt.status}`}>{
-                                pt.status === 'grounding' ? '접지중' :
-                                pt.status === 'removed'   ? '철거완료' :
-                                pt.status === 'exempt'    ? '비대상' : '미등록'
-                              }</span>
-                            </div>
-                            {latest && latest.userName && (
-                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
-                                관리: {latest.affiliation} {latest.userName} ({new Date(latest.timestamp).toLocaleString()})
-                              </div>
-                            )}
-                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                              {latest && <button className="photo-btn" onClick={async () => {
-                                if (!currentProject) return;
-                                setViewingPhoto({ towerId: selectedTower.id, pointId: pt.id });
-                                setViewingHistory(null);
-                                setViewingHistoryLoading(true);
-                                try {
-                                  const rows = await getPointPhotoHistory(selectedTower.id, pt.id, currentProject.id);
-                                  setViewingHistory((rows as any[]).map(r => ({
-                                    status: r.status,
-                                    timestamp: new Date(r.created_at).getTime(),
-                                    photo: r.photo_data || '',
-                                    userName: r.user_name,
-                                    affiliation: r.affiliation,
-                                    latitude: r.latitude ?? null,
-                                    longitude: r.longitude ?? null,
-                                    locationAccuracy: r.location_accuracy ?? null,
-                                  })));
-                                } catch { setViewingHistory([]); }
-                                finally { setViewingHistoryLoading(false); }
-                              }}>기록보기</button>}
-                              <button className="photo-btn primary" onClick={() => { setSelectedPointId(pt.id); setUploadType('install'); setUploadTowerId(selectedTower.id); }}>설치</button>
-                              {pt.status === 'grounding' && (
-                                <button className="photo-btn" style={{ borderColor: '#10b981', color: '#10b981' }} onClick={() => { setSelectedPointId(pt.id); setUploadType('remove'); setUploadTowerId(selectedTower.id); }}>철거</button>
-                              )}
-                              <button className="photo-btn" onClick={() => toggleExempt(selectedTower.id, pt.id, pt.status)} style={{ background: pt.status === 'exempt' ? '#ef4444' : '#f1f5f9', color: pt.status === 'exempt' ? 'white' : 'inherit' }}>
-                                {pt.status === 'exempt' ? '비대상 해제' : '비대상'}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Photo history Modal ── */}
-      {viewingPhoto && (() => {
-        const tower = towers.find(t => t.id === viewingPhoto.towerId);
-        const point = tower?.points.find(p => p.id === viewingPhoto.pointId);
-        const history = viewingHistory || [];
-        const closeModal = () => { setViewingPhoto(null); setViewingHistory(null); };
-        return (
-          <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && closeModal()}>
-            <div className="modal-content glass-card">
-              <div className="modal-header">
-                <h2>{tower?.name} {point?.name} 업로드 기록</h2>
-                <button className="modal-close" onClick={closeModal}>✕</button>
-              </div>
-              <div className="modal-body">
-                {viewingHistoryLoading ? (
-                  <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>기록 불러오는 중...</p>
-                ) : history.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>기록이 없습니다.</p>
-                ) : history.map((h, i) => (
-                  <div key={i} style={{ border: '1px solid var(--border-color)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-                    {h.photo && <img src={h.photo} style={{ width: '100%', display: 'block' }} alt="접지사진" />}
-                    <div style={{ padding: '0.75rem', background: '#f8fafc' }}>
-                      <div style={{ fontWeight: 700, color: h.status === 'grounding' ? 'var(--status-grounding)' : h.status === 'removed' ? 'var(--status-removed)' : 'var(--text-muted)' }}>
-                        {h.status === 'grounding' ? '접지 설치' : h.status === 'removed' ? '접지 철거' : h.status}
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                        {h.affiliation} {h.userName} &middot; {new Date(h.timestamp).toLocaleString()}
-                      </div>
-                      {h.latitude != null && h.longitude != null && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                          📍 <a href={`https://www.google.com/maps?q=${h.latitude},${h.longitude}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
-                            {h.latitude.toFixed(5)}, {h.longitude.toFixed(5)}
-                          </a>
-                          {h.locationAccuracy != null && ` (±${Math.round(h.locationAccuracy)}m)`}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── Timeline (Tower full history) Modal ── */}
-      {timelineTowerId && (() => {
-        const tower = towers.find(t => t.id === timelineTowerId);
-        const pointMap = new Map((tower?.points || []).map(p => [p.id, p]));
-        const close = () => { setTimelineTowerId(null); setTimelineData(null); };
-        return (
-          <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && close()}>
-            <div className="modal-content glass-card">
-              <div className="modal-header">
-                <h2>{tower?.name} 작업 이력 타임라인</h2>
-                <button className="modal-close" onClick={close}>✕</button>
-              </div>
-              <div className="modal-body">
-                {timelineLoading ? (
-                  <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>이력 불러오는 중...</p>
-                ) : !timelineData || timelineData.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>작업 이력이 없습니다.</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                    {timelineData.map((h, i) => {
-                      const pt = h.pointId ? pointMap.get(h.pointId) : null;
-                      const label = pt
-                        ? `${pt.circuit}회선 · ${pt.phase.toUpperCase()}상 ${pt.groundingType === 'main' ? '주접지' : '보조접지'}`
-                        : (h.pointId || '');
-                      const statusLabel =
-                        h.status === 'grounding' ? '접지 설치' :
-                        h.status === 'removed'   ? '접지 철거' :
-                        h.status === 'exempt'    ? '비대상 지정' :
-                        h.status === 'none'      ? '상태 초기화' : h.status;
-                      const statusColor =
-                        h.status === 'grounding' ? 'var(--status-grounding)' :
-                        h.status === 'removed'   ? 'var(--status-removed)' : 'var(--text-muted)';
-                      return (
-                        <div key={i} style={{ padding: '0.75rem 0.9rem', border: '1px solid var(--border-color)', borderRadius: 10, background: '#f8fafc' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{label}</span>
-                            <span style={{ fontWeight: 700, fontSize: '0.8rem', color: statusColor }}>{statusLabel}</span>
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            {new Date(h.timestamp).toLocaleString()} &middot; {h.affiliation} {h.userName}
-                          </div>
-                          {h.latitude != null && h.longitude != null && (
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                              📍 <a href={`https://www.google.com/maps?q=${h.latitude},${h.longitude}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
-                                {h.latitude.toFixed(5)}, {h.longitude.toFixed(5)}
-                              </a>
-                              {h.locationAccuracy != null && ` (±${Math.round(h.locationAccuracy)}m)`}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── Upload Modal ── */}
-      {selectedPointId && (
-        <div className="modal-overlay active">
-          <div className="modal-content glass-card" style={{ maxWidth: 400, margin: 'auto' }}>
-            <div className="modal-header"><h2>사진 업로드</h2></div>
-            <div className="upload-body">
-              <div style={{ marginBottom: 15, padding: '0.8rem', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, fontSize: '0.85rem', color: '#b91c1c', lineHeight: 1.4 }}>
-                <strong>⚠️ 주의사항</strong><br/>
-                현재 <b>HEIF/HEIC 파일은 업로드할 수 없습니다.</b><br/>
-                아이폰 사용자이신 경우, 카메라 설정에서 포맷을 <b>"가장 호환성 높은"</b>으로 변경하시거나 <b>일반 JPEG 사진</b>만 올려주세요.
-              </div>
-              {/* disabled 제거: iOS WebKit에서 disabled 시 File 참조가 무효화됨 */}
-              <input type="file" accept="image/jpeg, image/png, image/webp" onClick={(e) => { (e.target as any).value = ''; }} onChange={handleFileSelect} />
-              {pendingPhotoPreview && <img src={pendingPhotoPreview} style={{ maxWidth: '100%', marginTop: 10 }} />}
-              {pendingPhotoPreview && (
-                <div style={{
-                  marginTop: 10, padding: '0.6rem 0.75rem', borderRadius: 8, fontSize: '0.8rem',
-                  background: gpsStatus === 'ok' ? '#ecfdf5' : gpsStatus === 'pending' ? '#eff6ff' : '#fef3c7',
-                  color: gpsStatus === 'ok' ? '#065f46' : gpsStatus === 'pending' ? '#1e40af' : '#92400e',
-                  border: `1px solid ${gpsStatus === 'ok' ? '#a7f3d0' : gpsStatus === 'pending' ? '#bfdbfe' : '#fcd34d'}`,
-                }}>
-                  {gpsStatus === 'pending' && '📍 위치 확인 중...'}
-                  {gpsStatus === 'ok' && pendingGPS && (
-                    <>
-                      {gpsSource === 'exif' ? '📸 촬영 위치 기록됨' : '📍 업로드 위치 기록됨'}
-                      {' '}({pendingGPS.latitude.toFixed(5)}, {pendingGPS.longitude.toFixed(5)}
-                      {pendingGPS.accuracy != null && ` / ±${Math.round(pendingGPS.accuracy)}m`})
-                    </>
-                  )}
-                  {gpsStatus === 'denied' && '⚠️ 위치 권한 거부됨 — 사진 EXIF에도 GPS가 없어 좌표가 기록되지 않습니다.'}
-                  {gpsStatus === 'unsupported' && '⚠️ 이 기기는 위치 기능을 지원하지 않습니다.'}
-                  {gpsStatus === 'error' && '⚠️ 위치 정보를 가져오지 못했습니다.'}
-                  {gpsStatus === 'idle' && '위치 정보 확인 중...'}
-                </div>
-              )}
-              <div className="upload-actions" style={{ marginTop: 20 }}>
-                <button className="btn-cancel" onClick={() => { setSelectedPointId(null); setPendingPhotoPreview(null); setUploadTowerId(null); }} disabled={isLoading}>취소</button>
-                <button className="btn-upload" onClick={handlePhotoUpload} disabled={!pendingPhotoPreview || isLoading}>
-                  {isLoading ? '업로드 중...' : '업로드'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Settings Modal ── */}
-      {showSettings && (
-        <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && setShowSettings(false)}>
-          <div className="modal-content glass-card" style={{ maxWidth: 560 }}>
-            <div className="modal-header">
-              <h2>설정</h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button
-                  onClick={handleLogout}
-                  style={{ padding: '0.35rem 0.75rem', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  로그아웃
-                </button>
-                <button className="modal-close" onClick={() => setShowSettings(false)}>✕</button>
-              </div>
-            </div>
-
-            {/* Tab navigation */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', padding: '0 1.25rem' }}>
-              {(['project', 'towers'] as const).map(tab => (
-                <button key={tab} onClick={() => { setSettingsError(''); setSettingsTab(tab); }}
-                  style={{
-                    flex: 1, padding: '0.75rem', border: 'none', background: 'none', cursor: 'pointer',
-                    fontWeight: 700, fontSize: '0.9rem',
-                    color: settingsTab === tab ? 'var(--primary)' : 'var(--text-muted)',
-                    borderBottom: settingsTab === tab ? '2px solid var(--primary)' : '2px solid transparent',
-                    transition: 'all 0.2s',
-                  }}>
-                  {tab === 'project' ? '프로젝트 정보' : '철탑 목록'}
-                </button>
-              ))}
-            </div>
-
-            <div className="modal-body" style={{ gap: '1rem' }}>
-              {settingsError && (
-                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '0.75rem', color: '#ef4444', fontSize: '0.85rem', fontWeight: 600 }}>
-                  {settingsError}
-                </div>
-              )}
-
-              {settingsTab === 'project' ? (
-                <>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>사업명</label>
-                    <input
-                      type="text"
-                      value={settingsDraft.projectName}
-                      onChange={e => setSettingsDraft({ ...settingsDraft, projectName: e.target.value })}
-                      style={{ width: '100%', padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>공사구간</label>
-                    <input
-                      type="text"
-                      value={settingsDraft.constructionSection}
-                      onChange={e => setSettingsDraft({ ...settingsDraft, constructionSection: e.target.value })}
-                      style={{ width: '100%', padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>선로명</label>
-                    <input
-                      type="text"
-                      value={settingsDraft.lineName}
-                      onChange={e => setSettingsDraft({ ...settingsDraft, lineName: e.target.value })}
-                      style={{ width: '100%', padding: '0.65rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: '0.9rem', fontFamily: 'var(--font-sans)' }}
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* 선로 관리 */}
-                  <div style={{ background: '#eff6ff', borderRadius: 10, padding: '1rem', border: '1px solid #bfdbfe' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.6rem', color: 'var(--text-main)' }}>
-                      선로 관리 ({lineConfigsDraft.length}개)
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.6rem' }}>
-                      {lineConfigsDraft.map(l => (
-                        <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <button onClick={() => setSettingsLineId(l.id)}
-                            style={{
-                              padding: '0.35rem 0.75rem',
-                              border: `1px solid ${settingsLineId === l.id ? 'var(--primary)' : 'var(--border-color)'}`,
-                              borderRadius: 999,
-                              background: settingsLineId === l.id ? 'var(--primary)' : 'white',
-                              color: settingsLineId === l.id ? 'white' : 'var(--text-main)',
-                              fontSize: '0.78rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                            }}>
-                            {l.name}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    {activeSettingsLine && (
-                      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem', alignItems: 'center' }}>
-                        <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, minWidth: 56 }}>현재 선로명</label>
-                        <input type="text" value={activeSettingsLine.name}
-                          onChange={e => {
-                            const v = e.target.value;
-                            setLineConfigsDraft(prev => prev.map(l => l.id === settingsLineId ? { ...l, name: v } : l));
-                          }}
-                          style={{ flex: 1, padding: '0.4rem 0.55rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.85rem', fontFamily: 'var(--font-sans)' }} />
-                        <button
-                          onClick={() => {
-                            if (lineConfigsDraft.length <= 1) {
-                              setSettingsError('선로는 최소 1개 이상 필요합니다.');
-                              return;
-                            }
-                            // 업로드된 데이터가 있는 선로는 삭제 금지
-                            const hasData = towers.some(t => t.lineId === settingsLineId && (t.points.some(p => p.history.length > 0) || t.points.some(p => p.status === 'exempt')));
-                            if (hasData) {
-                              setSettingsError(`삭제 불가: "${activeSettingsLine.name}"에 업로드된 데이터가 있습니다.`);
-                              return;
-                            }
-                            if (!confirm(`"${activeSettingsLine.name}" 선로를 삭제하시겠습니까?`)) return;
-                            setSettingsError('');
-                            const remaining = lineConfigsDraft.filter(l => l.id !== settingsLineId);
-                            setLineConfigsDraft(remaining);
-                            setSettingsLineId(remaining[0].id);
-                          }}
-                          style={{ padding: '0.4rem 0.6rem', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 6, fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
-                          선로 삭제
-                        </button>
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <input type="text" placeholder="새 선로명 (예: 이천-광주 T/L)" value={newLineName}
-                        onChange={e => setNewLineName(e.target.value)}
-                        style={{ flex: 1, padding: '0.4rem 0.55rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.85rem', fontFamily: 'var(--font-sans)' }} />
-                      <button
-                        onClick={() => {
-                          const name = newLineName.trim();
-                          if (!name) { setSettingsError('선로명을 입력하세요.'); return; }
-                          if (lineConfigsDraft.some(l => l.name === name)) { setSettingsError('중복 선로명입니다.'); return; }
-                          setSettingsError('');
-                          const newLine: LineConfig = { id: genLineId(), name, towers: [] };
-                          setLineConfigsDraft(prev => [...prev, newLine]);
-                          setSettingsLineId(newLine.id);
-                          setNewLineName('');
-                        }}
-                        style={{ padding: '0.4rem 0.9rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 6, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
-                        선로 추가
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Tower list generator */}
-                  <div style={{ background: '#f8fafc', borderRadius: 10, padding: '1rem', border: '1px solid var(--border-color)' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-main)' }}>철탑 리스트 생성</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                      <div>
-                        <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>접두어</label>
-                        <input type="text" placeholder="예: No." value={genPrefix} onChange={e => setGenPrefix(e.target.value)}
-                          style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.85rem' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>시점번호</label>
-                        <input type="number" placeholder="1" value={genStart} onChange={e => setGenStart(e.target.value)}
-                          style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.85rem' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>종점번호</label>
-                        <input type="number" placeholder="25" value={genEnd} onChange={e => setGenEnd(e.target.value)}
-                          style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.85rem' }} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>접미어</label>
-                        <input type="text" placeholder="호" value={genSuffix} onChange={e => setGenSuffix(e.target.value)}
-                          style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.85rem' }} />
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleGenerateTowerList}
-                      style={{ width: '100%', padding: '0.6rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>
-                      리스트 생성
-                    </button>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-                      ※ 기존 목록을 완전히 대체합니다.
-                    </div>
-                  </div>
-
-                  {/* Current tower list */}
-                  <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-main)' }}>
-                      현재 철탑 목록 ({towerConfigsDraft.length}기)
-                    </div>
-                    <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                      {towerConfigsDraft.map((cfg, idx) => {
-                        const tower = towers.find(t => t.id === `${settingsLineId}-tower-${idx}`);
-                        const hasData = tower && (tower.points.some(p => p.history.length > 0) || tower.points.some(p => p.status === 'exempt'));
-                        return (
-                          <div key={idx}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.6rem', background: '#f8fafc', borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', minWidth: 24 }}>{idx + 1}</span>
-                              <input
-                                type="text"
-                                value={cfg.name}
-                                onChange={e => {
-                                  const updated = [...towerConfigsDraft];
-                                  updated[idx] = { ...updated[idx], name: e.target.value };
-                                  setTowerConfigsDraft(updated);
-                                }}
-                                style={{ flex: 1, border: '1px solid var(--border-color)', borderRadius: 6, padding: '0.3rem 0.5rem', fontSize: '0.85rem', fontFamily: 'var(--font-sans)' }}
-                              />
-                              {hasData && (
-                                <span title="데이터 있음" style={{ fontSize: '0.75rem', color: '#f59e0b' }}>📷</span>
-                              )}
-                              <button
-                                onClick={() => setInsertAfterIdx(insertAfterIdx === idx ? null : idx)}
-                                title="이 위치 뒤에 삽입"
-                                style={{ padding: '0.25rem 0.4rem', background: insertAfterIdx === idx ? 'var(--primary)' : '#e2e8f0', color: insertAfterIdx === idx ? 'white' : 'var(--text-muted)', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}>
-                                +
-                              </button>
-                              <button
-                                onClick={() => handleRemoveTower(idx)}
-                                title="철탑 제거"
-                                style={{ padding: '0.25rem 0.4rem', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem' }}>
-                                ✕
-                              </button>
-                            </div>
-                            {insertAfterIdx === idx && (
-                              <div style={{ marginTop: '0.25rem', padding: '0.75rem', background: 'rgba(37,99,235,0.05)', border: '1px dashed var(--primary)', borderRadius: 8 }}>
-                                {/* 삽입 모드 전환 */}
-                                <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
-                                  {(['single', 'range'] as const).map(m => (
-                                    <button key={m} onClick={() => setInsertMode(m)}
-                                      style={{ flex: 1, padding: '0.3rem', border: `1px solid ${insertMode === m ? 'var(--primary)' : 'var(--border-color)'}`, borderRadius: 6, background: insertMode === m ? 'var(--primary)' : 'white', color: insertMode === m ? 'white' : 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
-                                      {m === 'single' ? '1기 삽입' : '범위 삽입'}
-                                    </button>
-                                  ))}
-                                </div>
-                                {insertMode === 'single' ? (
-                                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                    <input type="text" placeholder="철탑명 (예: 7.1호, 이천S/S)" value={insertSingleName}
-                                      onChange={e => setInsertSingleName(e.target.value)}
-                                      onKeyDown={e => e.key === 'Enter' && handleInsertTowers(idx)}
-                                      style={{ flex: 1, padding: '0.35rem 0.5rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.85rem', fontFamily: 'var(--font-sans)' }} />
-                                    <button onClick={() => handleInsertTowers(idx)}
-                                      style={{ padding: '0.35rem 0.75rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 6, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
-                                      삽입
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <input type="number" placeholder="시점" value={insertStartNum} onChange={e => setInsertStartNum(e.target.value)}
-                                      style={{ width: 64, padding: '0.35rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.8rem' }} />
-                                    <span style={{ fontSize: '0.75rem' }}>~</span>
-                                    <input type="number" placeholder="종점" value={insertEndNum} onChange={e => setInsertEndNum(e.target.value)}
-                                      style={{ width: 64, padding: '0.35rem', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.8rem' }} />
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>호</span>
-                                    <button onClick={() => handleInsertTowers(idx)}
-                                      style={{ padding: '0.35rem 0.75rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: 6, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
-                                      삽입
-                                    </button>
-                                  </div>
-                                )}
-                                <button onClick={() => setInsertAfterIdx(null)}
-                                  style={{ marginTop: '0.4rem', padding: '0.25rem 0.5rem', background: '#f1f5f9', border: 'none', borderRadius: 6, fontSize: '0.75rem', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                                  취소
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button className="btn-cancel" style={{ flex: 1 }} onClick={() => setShowSettings(false)}>취소</button>
-                <button className="btn-upload" style={{ flex: 2 }} onClick={saveSettings}>저장</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Loading Bar */}
-      {isLoading && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.7)', color: 'white', padding: '1rem', textAlign: 'center', fontSize: '0.9rem', fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-          <div>{uploadMessage || '처리 중입니다... 잠시만 기다려주세요.'}</div>
-          <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 2, overflow: 'hidden' }}>
-            <div style={{ width: '100%', height: '100%', background: 'var(--primary)', animation: 'loading 1.5s infinite ease-in-out' }} />
-          </div>
-        </div>
-      )}
-      <div id="toast" className={`toast ${toastMsg ? 'show' : ''}`}>{toastMsg}</div>
-      <style jsx>{`
-        @keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-      `}</style>
+      <style dangerouslySetInnerHTML={{ __html: css }} />
+      <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
     </>
   );
 }

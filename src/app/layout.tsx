@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import './globals.css';
 
 export const metadata: Metadata = {
   title: '접지관리 시스템 - 154kV 이천-가남 T/L',
@@ -40,9 +39,7 @@ export default function RootLayout({
         }} />
       </head>
       <body>
-        <div id="app">
-          {children}
-        </div>
+        {children}
       </body>
     </html>
   );
