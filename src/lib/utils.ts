@@ -53,10 +53,11 @@ export function buildPoints(lineId: string, towerIdx: number, logs: any[]): Poin
           groundingType,
           circuit,
           status: latest ? latest.status : 'none',
+          // 최신 로그만 meta로 유지 (photo는 기록보기 모달이 지연 로드)
           history: ptLogs.map((l: any) => ({
             status: l.status,
             timestamp: new Date(l.created_at).getTime(),
-            photo: l.photo_data,
+            photo: '',                   // lazy-loaded
             userName: l.user_name,
             affiliation: l.affiliation,
           })),

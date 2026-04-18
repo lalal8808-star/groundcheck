@@ -293,7 +293,7 @@ export async function uploadGrounding(data: {
       INSERT INTO grounding_logs (tower_id, point_id, status, photo_data, user_id, project_id)
       VALUES (${data.towerId}, ${data.pointId}, ${data.status}, ${data.photoData}, ${data.userId}, ${data.projectId})
     `;
-    revalidatePath('/');
+    // revalidatePath 제거: SPA 클라이언트가 자체 상태 관리. 서버 revalidate는 응답 지연만 늘림.
     return { success: true };
   } catch (e: any) {
     console.error(e);
@@ -301,13 +301,18 @@ export async function uploadGrounding(data: {
   }
 }
 
+/**
+ * 각 접지점의 최신 상태만 가져옴. photo_data는 의도적으로 제외.
+ * (페이로드 대폭 절감 — 기록보기 모달에서 필요할 때 getPointPhotoHistory로 지연 로드)
+ */
 export async function getLatestGrounding(t?: number, projectId?: string) {
   try {
     if (projectId) {
       const result = await sql`
         WITH LatestLogs AS (
           SELECT DISTINCT ON (tower_id, point_id)
-            tower_id, point_id, status, photo_data, user_id, created_at
+            tower_id, point_id, status, user_id, created_at,
+            (photo_data IS NOT NULL) AS has_photo
           FROM grounding_logs
           WHERE project_id = ${projectId}
           ORDER BY tower_id, point_id, created_at DESC
@@ -319,6 +324,31 @@ export async function getLatestGrounding(t?: number, projectId?: string) {
       return result;
     }
     return [];
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
+/**
+ * 특정 접지점의 전체 히스토리를 photo_data와 함께 반환 (기록보기 모달 전용).
+ */
+export async function getPointPhotoHistory(
+  towerId: string,
+  pointId: string,
+  projectId: string,
+) {
+  try {
+    const result = await sql`
+      SELECT l.status, l.photo_data, l.created_at, u.name as user_name, u.affiliation
+      FROM grounding_logs l
+      LEFT JOIN users u ON l.user_id = u.id
+      WHERE l.project_id = ${projectId}
+        AND l.tower_id = ${towerId}
+        AND l.point_id = ${pointId}
+      ORDER BY l.created_at DESC
+    `;
+    return result;
   } catch (e) {
     console.error(e);
     return [];
@@ -344,7 +374,7 @@ export async function togglePointExempt(
       INSERT INTO grounding_logs (tower_id, point_id, status, user_id, project_id)
       VALUES (${towerId}, ${pointId}, ${status}, ${userId}, ${projectId})
     `;
-    revalidatePath('/');
+    // revalidatePath 제거 (SPA)
     return { success: true };
   } catch {
     return { success: false, error: '변경에 실패했습니다.' };
@@ -368,7 +398,7 @@ export async function uploadRegistry(title: string, fileData: string, userId: st
       INSERT INTO registries (title, file_data, user_id, project_id)
       VALUES (${title}, ${fileData}, ${userId}, ${projectId})
     `;
-    revalidatePath('/');
+    // revalidatePath 제거 (SPA)
     return { success: true };
   } catch (e: any) {
     console.error(e);

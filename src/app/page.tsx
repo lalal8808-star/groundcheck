@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { loginToProject, createProject, getAdminProjects, deleteProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData, getProjectSettings, saveProjectSettings } from './actions';
+import { loginToProject, createProject, getAdminProjects, deleteProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, getPointPhotoHistory, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData, getProjectSettings, saveProjectSettings } from './actions';
 
 import { AdminProject, User, Project, HistoryItem, Point, Tower, Registry, TowerConfig, LineConfig } from '../lib/types';
 import { buildPoints, migrateToLineConfigs, genLineId } from '../lib/utils';
@@ -23,6 +23,8 @@ export default function GroundCheckApp() {
 
   const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<{ towerId: string; pointId: string } | null>(null);
+  const [viewingHistory, setViewingHistory] = useState<HistoryItem[] | null>(null);
+  const [viewingHistoryLoading, setViewingHistoryLoading] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
@@ -338,22 +340,51 @@ export default function GroundCheckApp() {
   const handlePhotoUpload = async () => {
     if (!currentUser || !currentProject) return setShowAuthModal(true);
     if (!uploadTowerId || !selectedPointId || !pendingPhotoPreview) return;
+
+    // 캡처 (state reset 이후에도 쓰기 위해)
+    const targetTowerId = uploadTowerId;
+    const targetPointId = selectedPointId;
+    const newStatus: 'grounding' | 'removed' = uploadType === 'install' ? 'grounding' : 'removed';
+    const photoPreview = pendingPhotoPreview;
+
     setIsLoading(true);
     setUploadMessage('파일 전송 중...');
     try {
       const resp = await uploadGrounding({
-        towerId: uploadTowerId,
-        pointId: selectedPointId,
-        status: uploadType === 'install' ? 'grounding' : 'removed',
-        photoData: pendingPhotoPreview,
+        towerId: targetTowerId,
+        pointId: targetPointId,
+        status: newStatus,
+        photoData: photoPreview,
         userId: currentUser.id,
         projectId: currentProject.id,
       });
       if (resp.success) {
+        // 낙관적 업데이트: refreshData 없이 로컬 state만 갱신
+        setTowers(prev => prev.map(t =>
+          t.id === targetTowerId
+            ? {
+                ...t,
+                points: t.points.map(p =>
+                  p.id === targetPointId
+                    ? {
+                        ...p,
+                        status: newStatus,
+                        history: [{
+                          status: newStatus,
+                          timestamp: Date.now(),
+                          photo: photoPreview,
+                          userName: currentUser.name,
+                          affiliation: currentUser.affiliation,
+                        }, ...p.history],
+                      }
+                    : p
+                ),
+              }
+            : t
+        ));
         setPendingPhotoPreview(null);
         setSelectedPointId(null);
         setUploadTowerId(null);
-        await refreshData();
         showToast('업로드가 완료되었습니다.');
       } else {
         alert('업로드 기록 실패: ' + resp.error);
@@ -420,11 +451,26 @@ export default function GroundCheckApp() {
   const toggleExempt = async (tId: string, pId: string, currentStatus: string) => {
     if (!currentUser || !currentProject) return setShowAuthModal(true);
     if (currentStatus !== 'exempt' && !confirm('비대상으로 전환하시겠습니까? (기록은 유지되지만 통계에서 제외됩니다)')) return;
+    const makeExempt = currentStatus !== 'exempt';
+    const newStatus: 'exempt' | 'none' = makeExempt ? 'exempt' : 'none';
     setIsLoading(true);
     try {
-      const resp = await togglePointExempt(tId, pId, currentUser.id, currentStatus !== 'exempt', currentProject.id);
-      if (resp.success) await refreshData();
-      else alert('실패: ' + resp.error);
+      const resp = await togglePointExempt(tId, pId, currentUser.id, makeExempt, currentProject.id);
+      if (resp.success) {
+        // 낙관적 업데이트: 해당 포인트만 상태 변경
+        setTowers(prev => prev.map(t =>
+          t.id === tId
+            ? {
+                ...t,
+                points: t.points.map(p =>
+                  p.id === pId ? { ...p, status: newStatus } : p
+                ),
+              }
+            : t
+        ));
+      } else {
+        alert('실패: ' + resp.error);
+      }
     } catch (e: any) {
       alert('전환 에러: ' + e.message);
     } finally {
@@ -1100,7 +1146,23 @@ export default function GroundCheckApp() {
                               </div>
                             )}
                             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                              {latest && <button className="photo-btn" onClick={() => setViewingPhoto({ towerId: selectedTower.id, pointId: pt.id })}>기록보기</button>}
+                              {latest && <button className="photo-btn" onClick={async () => {
+                                if (!currentProject) return;
+                                setViewingPhoto({ towerId: selectedTower.id, pointId: pt.id });
+                                setViewingHistory(null);
+                                setViewingHistoryLoading(true);
+                                try {
+                                  const rows = await getPointPhotoHistory(selectedTower.id, pt.id, currentProject.id);
+                                  setViewingHistory((rows as any[]).map(r => ({
+                                    status: r.status,
+                                    timestamp: new Date(r.created_at).getTime(),
+                                    photo: r.photo_data || '',
+                                    userName: r.user_name,
+                                    affiliation: r.affiliation,
+                                  })));
+                                } catch { setViewingHistory([]); }
+                                finally { setViewingHistoryLoading(false); }
+                              }}>기록보기</button>}
                               <button className="photo-btn primary" onClick={() => { setSelectedPointId(pt.id); setUploadType('install'); setUploadTowerId(selectedTower.id); }}>설치</button>
                               {pt.status === 'grounding' && (
                                 <button className="photo-btn" style={{ borderColor: '#10b981', color: '#10b981' }} onClick={() => { setSelectedPointId(pt.id); setUploadType('remove'); setUploadTowerId(selectedTower.id); }}>철거</button>
@@ -1125,16 +1187,19 @@ export default function GroundCheckApp() {
       {viewingPhoto && (() => {
         const tower = towers.find(t => t.id === viewingPhoto.towerId);
         const point = tower?.points.find(p => p.id === viewingPhoto.pointId);
-        const history = point?.history || [];
+        const history = viewingHistory || [];
+        const closeModal = () => { setViewingPhoto(null); setViewingHistory(null); };
         return (
-          <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && setViewingPhoto(null)}>
+          <div className="modal-overlay active" onClick={e => e.target === e.currentTarget && closeModal()}>
             <div className="modal-content glass-card">
               <div className="modal-header">
                 <h2>{tower?.name} {point?.name} 업로드 기록</h2>
-                <button className="modal-close" onClick={() => setViewingPhoto(null)}>✕</button>
+                <button className="modal-close" onClick={closeModal}>✕</button>
               </div>
               <div className="modal-body">
-                {history.length === 0 ? (
+                {viewingHistoryLoading ? (
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>기록 불러오는 중...</p>
+                ) : history.length === 0 ? (
                   <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>기록이 없습니다.</p>
                 ) : history.map((h, i) => (
                   <div key={i} style={{ border: '1px solid var(--border-color)', borderRadius: '0.75rem', overflow: 'hidden' }}>
