@@ -450,7 +450,7 @@ export default function GroundCheckApp() {
 
   const toggleExempt = async (tId: string, pId: string, currentStatus: string) => {
     if (!currentUser || !currentProject) return setShowAuthModal(true);
-    if (currentStatus !== 'exempt' && !confirm('비대상으로 전환하시겠습니까? (기록은 유지되지만 통계에서 제외됩니다)')) return;
+    // 안내 confirm 제거
     const makeExempt = currentStatus !== 'exempt';
     const newStatus: 'exempt' | 'none' = makeExempt ? 'exempt' : 'none';
     setIsLoading(true);
@@ -872,13 +872,20 @@ export default function GroundCheckApp() {
                       {(['a', 'b', 'c'] as const).map(phase => {
                         const main = circuitPoints.find(p => p.phase === phase && p.groundingType === 'main');
                         const sub  = circuitPoints.find(p => p.phase === phase && p.groundingType === 'sub');
-                        const dotClass = (p: typeof main) =>
-                          p?.status === 'grounding' ? 'grounding' : p?.status === 'removed' ? 'removed' : p?.status === 'exempt' ? 'exempt' : '';
+                        const renderDot = (p: typeof main, title: string) => {
+                          if (p?.status === 'exempt') {
+                            return (
+                              <span title={title} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 10, height: 10, fontSize: '0.65rem', fontWeight: 900, color: '#94a3b8', lineHeight: 1 }}>✕</span>
+                            );
+                          }
+                          const cls = p?.status === 'grounding' ? 'grounding' : p?.status === 'removed' ? 'removed' : '';
+                          return <div className={`status-circle ${cls}`} title={title} />;
+                        };
                         return (
                           <div key={phase} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                            <div style={{ display: 'flex', gap: 3 }}>
-                              <div className={`status-circle ${dotClass(main)}`} title={`${phase.toUpperCase()}상 주접지`} />
-                              <div className={`status-circle ${dotClass(sub)}`}  title={`${phase.toUpperCase()}상 보조접지`} />
+                            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                              {renderDot(main, `${phase.toUpperCase()}상 주접지`)}
+                              {renderDot(sub,  `${phase.toUpperCase()}상 보조접지`)}
                             </div>
                             <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontWeight: 700 }}>{phase.toUpperCase()}</span>
                           </div>
