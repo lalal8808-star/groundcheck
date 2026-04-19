@@ -864,6 +864,25 @@ export default function LandingPage() {
     font-weight: 700;
   }
   .foot-top .brand p { font-size: 12px; line-height: 1.8; }
+  .foot-top .brand .creator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 8px 12px;
+    background: rgba(247, 166, 0, 0.08);
+    border: 1px solid rgba(247, 166, 0, 0.25);
+    border-left: 3px solid var(--kepco-gold);
+    border-radius: 4px;
+    color: #E8F0FA;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .foot-top .brand .creator .label {
+    color: var(--kepco-gold);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
   .foot-top .col h6 {
     color: #fff;
     font-size: 13px;
@@ -1471,6 +1490,10 @@ export default function LandingPage() {
         <p>송전선로 건설 현장을 위한 접지개소 통합 관리 플랫폼<br/>
           Powered by Next.js · TypeScript · Neon Postgres
         </p>
+        <div class="creator">
+          <span class="label">제작</span>
+          <span>한국전력공사 설비보강부 임종화</span>
+        </div>
       </div>
       <div class="col">
         <h6>시스템</h6>
@@ -1499,7 +1522,7 @@ export default function LandingPage() {
       </div>
     </div>
     <div class="foot-bottom">
-      <div>© Groundcheck. 송전선로 접지관리 시스템. All Rights Reserved.</div>
+      <div>© Groundcheck · 제작 : 한국전력공사 설비보강부 임종화 · All Rights Reserved.</div>
       <div>Build: Next.js 16 · React 19 · Neon Postgres</div>
     </div>
   </div>
