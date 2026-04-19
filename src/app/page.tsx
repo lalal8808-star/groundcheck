@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: '접지관리 시스템 | Groundcheck - 154kV 이천-가남 T/L 가공송전선로',
-  description: '154kV 이천-가남 T/L 가공송전선로 설치공사 접지개소 주접지 및 보조접지 통합 관리 시스템',
+  title: '접지관리 시스템 | Groundcheck',
+  description: '송전선로 건설 현장의 접지개소를 모바일로 등록·추적·보고하는 통합 관리 시스템',
 };
 
 export default function LandingPage() {
@@ -136,7 +136,7 @@ export default function LandingPage() {
       radial-gradient(circle at 80% 20%, rgba(247,166,0,0.15) 0%, transparent 40%);
     background-color: var(--kepco-blue-darker);
     color: #fff;
-    padding: 80px 0 100px;
+    padding: 90px 0 110px;
     position: relative;
     overflow: hidden;
   }
@@ -174,34 +174,9 @@ export default function LandingPage() {
     font-size: 18px;
     font-weight: 300;
     color: #cfd8e6;
-    max-width: 640px;
-    margin-bottom: 36px;
-    line-height: 1.7;
-  }
-  .hero-project-info {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 24px;
-    padding: 20px 28px;
-    background: rgba(255,255,255,0.08);
-    border-left: 4px solid var(--kepco-gold);
-    border-radius: 4px;
-    margin-bottom: 36px;
     max-width: 720px;
-    backdrop-filter: blur(8px);
-  }
-  .hero-project-info .item strong {
-    display: block;
-    font-size: 11px;
-    color: #9fb3d1;
-    font-weight: 400;
-    letter-spacing: 0.1em;
-    margin-bottom: 4px;
-  }
-  .hero-project-info .item span {
-    font-size: 15px;
-    color: #fff;
-    font-weight: 500;
+    margin-bottom: 40px;
+    line-height: 1.7;
   }
   .hero-buttons {
     display: flex;
@@ -231,38 +206,6 @@ export default function LandingPage() {
     color: #fff;
   }
   .btn-outline:hover { background: rgba(255,255,255,0.1); border-color: #fff; }
-
-  /* ---------- STATS ---------- */
-  .stats {
-    background: #fff;
-    margin-top: -50px;
-    position: relative;
-    z-index: 2;
-    border-radius: 8px;
-    box-shadow: 0 10px 40px rgba(0,33,79,0.12);
-    padding: 32px 0;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-  }
-  .stat-item {
-    text-align: center;
-    padding: 12px 20px;
-    border-right: 1px solid var(--border);
-  }
-  .stat-item:last-child { border-right: none; }
-  .stat-item .num {
-    font-size: 36px;
-    font-weight: 800;
-    color: var(--kepco-blue);
-    line-height: 1;
-    margin-bottom: 8px;
-    letter-spacing: -0.02em;
-  }
-  .stat-item .label {
-    font-size: 13px;
-    color: var(--kepco-gray-500);
-    font-weight: 500;
-  }
 
   /* ---------- SECTION COMMON ---------- */
   section.page-section {
@@ -360,85 +303,8 @@ export default function LandingPage() {
     background: #fff;
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 36px;
+    padding: 24px;
     box-shadow: 0 4px 16px rgba(0,33,79,0.06);
-  }
-  .mock-dashboard {
-    background: var(--kepco-blue-darker);
-    border-radius: 6px;
-    padding: 16px;
-    color: #fff;
-  }
-  .mock-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 14px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    margin-bottom: 16px;
-  }
-  .mock-header .title {
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .mock-header .circuit-tabs {
-    display: flex;
-    gap: 4px;
-    font-size: 11px;
-  }
-  .mock-header .circuit-tabs span {
-    padding: 4px 10px;
-    border-radius: 3px;
-    background: rgba(255,255,255,0.1);
-  }
-  .mock-header .circuit-tabs span.active {
-    background: var(--kepco-gold);
-    color: var(--kepco-blue-darker);
-    font-weight: 700;
-  }
-  .mock-towers {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 6px;
-  }
-  .mock-tower {
-    background: rgba(255,255,255,0.05);
-    border-radius: 4px;
-    padding: 10px 6px;
-    text-align: center;
-    font-size: 10px;
-  }
-  .mock-tower .name {
-    color: #9fb3d1;
-    margin-bottom: 6px;
-  }
-  .mock-tower .dots {
-    display: flex;
-    justify-content: center;
-    gap: 3px;
-  }
-  .dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #3a5a82;
-  }
-  .dot.g { background: #22c55e; }
-  .dot.r { background: #ef4444; }
-  .dot.e { background: #6b7280; }
-  .dot.y { background: var(--kepco-gold); }
-  .mock-legend {
-    display: flex;
-    gap: 14px;
-    margin-top: 16px;
-    padding-top: 14px;
-    border-top: 1px solid rgba(255,255,255,0.1);
-    font-size: 10px;
-    color: #9fb3d1;
-  }
-  .mock-legend span {
-    display: flex;
-    align-items: center;
-    gap: 5px;
   }
 
   /* ---------- FEATURES ---------- */
@@ -572,13 +438,12 @@ export default function LandingPage() {
     background: #fff;
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 28px;
+    padding: 24px;
     box-shadow: 0 6px 24px rgba(0,33,79,0.06);
     min-height: 320px;
   }
 
   /* ---------- REAL-UI ACCURATE MOCKUPS ---------- */
-  /* 실제 앱 UI에 맞춘 재현 목업 */
   .app-frame {
     background: linear-gradient(180deg, #f0f3fa 0%, #e8ebf7 100%);
     border-radius: 10px;
@@ -703,7 +568,7 @@ export default function LandingPage() {
     height: 5px; background: #f3f4f6; border-radius: 4px; overflow: hidden;
   }
   .app-progress-bar span {
-    display: block; height: 100%; width: 3%; background: #10b981; border-radius: 4px;
+    display: block; height: 100%; background: #10b981; border-radius: 4px;
   }
 
   /* Tower grid */
@@ -736,9 +601,7 @@ export default function LandingPage() {
     display: flex; flex-direction: column; align-items: center; gap: 2px;
     min-width: 18px;
   }
-  .app-phase .dots {
-    display: flex; gap: 1px;
-  }
+  .app-phase .dots { display: flex; gap: 1px; }
   .pdot {
     width: 6px; height: 6px; border-radius: 50%;
     background: #e5e7eb;
@@ -746,7 +609,6 @@ export default function LandingPage() {
   }
   .pdot.g { background: #10b981; }
   .pdot.r { background: #ef4444; }
-  .pdot.x { background: #ef4444; position: relative; }
   .pdot.empty { background: transparent; border: 1px dashed #d1d5db; }
   .pdot.gray { background: #9ca3af; }
 
@@ -778,9 +640,7 @@ export default function LandingPage() {
     padding: 10px 12px;
     margin-bottom: 10px;
   }
-  .app-point {
-    padding: 8px 0;
-  }
+  .app-point { padding: 8px 0; }
   .app-point + .app-point { border-top: 1px dashed #e5e7eb; }
   .app-point-head {
     display: flex; justify-content: space-between; align-items: center;
@@ -797,9 +657,7 @@ export default function LandingPage() {
   .app-point-meta {
     font-size: 9.5px; color: #9ca3af; margin-bottom: 6px;
   }
-  .app-btn-row {
-    display: flex; gap: 4px;
-  }
+  .app-btn-row { display: flex; gap: 4px; }
   .app-btn-row .ab {
     font-size: 10px; font-weight: 600;
     padding: 5px 10px; border-radius: 5px;
@@ -827,7 +685,7 @@ export default function LandingPage() {
   .app-timeline-item .status.green { color: #15803d; }
   .app-timeline-item .status.gray { color: #6b7280; }
 
-  /* Mock UI pieces */
+  /* Login mock */
   .mock-login {
     background: #fff;
     border: 1px solid var(--border);
@@ -864,72 +722,6 @@ export default function LandingPage() {
     font-weight: 600;
     margin-top: 6px;
   }
-
-  .mock-photo {
-    background: linear-gradient(135deg, #e0e7f0 0%, #c6d4e6 100%);
-    border-radius: 6px;
-    aspect-ratio: 4/3;
-    position: relative;
-    overflow: hidden;
-    margin-bottom: 12px;
-  }
-  .mock-photo::after {
-    content: "📷";
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 36px;
-    opacity: 0.4;
-  }
-  .mock-gps {
-    background: var(--kepco-blue-darker);
-    color: #fff;
-    padding: 10px 14px;
-    border-radius: 4px;
-    font-size: 11px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-  }
-  .mock-gps .lat { color: var(--kepco-gold); font-weight: 600; font-family: monospace; }
-
-  .mock-timeline {
-    position: relative;
-    padding-left: 24px;
-  }
-  .mock-timeline::before {
-    content: "";
-    position: absolute;
-    left: 7px; top: 10px; bottom: 10px;
-    width: 2px;
-    background: var(--border);
-  }
-  .timeline-item {
-    position: relative;
-    margin-bottom: 18px;
-  }
-  .timeline-item::before {
-    content: "";
-    position: absolute;
-    left: -22px; top: 5px;
-    width: 12px; height: 12px;
-    border-radius: 50%;
-    background: var(--kepco-blue);
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 1px var(--border);
-  }
-  .timeline-item .meta {
-    font-size: 11px;
-    color: var(--kepco-gray-500);
-    margin-bottom: 3px;
-  }
-  .timeline-item .desc {
-    font-size: 13px;
-    color: var(--kepco-gray-900);
-    font-weight: 500;
-  }
-
   .mock-file {
     display: flex;
     align-items: center;
@@ -945,9 +737,7 @@ export default function LandingPage() {
   .mock-file .date { color: var(--kepco-gray-500); font-size: 11px; }
 
   /* ---------- TECH STACK ---------- */
-  .tech {
-    background: #fff;
-  }
+  .tech { background: #fff; }
   .tech-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -1081,13 +871,8 @@ export default function LandingPage() {
     margin-bottom: 14px;
     letter-spacing: 0.02em;
   }
-  .foot-top .col ul {
-    list-style: none;
-  }
-  .foot-top .col li {
-    margin-bottom: 8px;
-    font-size: 12px;
-  }
+  .foot-top .col ul { list-style: none; }
+  .foot-top .col li { margin-bottom: 8px; font-size: 12px; }
   .foot-top .col a:hover { color: #fff; }
   .foot-bottom {
     padding-top: 24px;
@@ -1104,8 +889,6 @@ export default function LandingPage() {
     nav ul { display: none; }
     .hero h2 { font-size: 34px; }
     .hero-sub { font-size: 16px; }
-    .stats { grid-template-columns: repeat(2, 1fr); }
-    .stat-item { border-right: none; border-bottom: 1px solid var(--border); padding: 16px; }
     .about-grid, .features-grid, .detail-row, .tech-grid, .sec-grid, .foot-top {
       grid-template-columns: 1fr !important;
       gap: 32px;
@@ -1140,7 +923,7 @@ export default function LandingPage() {
       <div class="logo-mark">⚡</div>
       <div class="logo-text">
         <h1>접지관리 시스템</h1>
-        <p>GROUNDCHECK · Transmission Line Inspection</p>
+        <p>GROUNDCHECK · Grounding Inspection Platform</p>
       </div>
     </a>
     <nav>
@@ -1159,28 +942,13 @@ export default function LandingPage() {
 <!-- HERO -->
 <section class="hero">
   <div class="container">
-    <span class="hero-badge">▸ 154kV 송전선로 접지개소 관리</span>
-    <h2>현장에서 완성하는<br/><span class="accent">전력시설 접지관리</span>의 디지털 전환</h2>
+    <span class="hero-badge">▸ 송전선로 공사 접지관리 플랫폼</span>
+    <h2>현장에서 완성하는<br/><span class="accent">접지관리</span>의 디지털 전환</h2>
     <p class="hero-sub">
       송전선로 건설 현장의 주접지·보조접지 개소를 모바일 환경에서 실시간으로 등록·추적·보고합니다.
-      사진·GPS·이력 데이터를 통합 관리하여 시공 품질과 감리 투명성을 동시에 확보합니다.
+      사진·GPS·이력 데이터를 통합 관리하여 시공 품질과 감리 투명성을 동시에 확보하며,
+      어떤 규모의 공사에도 바로 적용할 수 있는 범용 접지관리 플랫폼입니다.
     </p>
-
-    <div class="hero-project-info">
-      <div class="item">
-        <strong>사업명</strong>
-        <span>154kV 이천-가남 등 2개T/L 용량증대 선종교체공사</span>
-      </div>
-      <div class="item">
-        <strong>공사 구간</strong>
-        <span>이천 S/S ~ 24호 · 27기</span>
-      </div>
-      <div class="item">
-        <strong>선로명</strong>
-        <span>154kV 이천-가남T/L (2회선)</span>
-      </div>
-    </div>
-
     <div class="hero-buttons">
       <a href="#features" class="btn btn-primary">주요 기능 살펴보기 →</a>
       <a href="/app" target="_blank" rel="noopener" class="btn btn-outline">시스템 접속</a>
@@ -1188,43 +956,20 @@ export default function LandingPage() {
   </div>
 </section>
 
-<!-- STATS -->
-<div class="container">
-  <div class="stats">
-    <div class="stat-item">
-      <div class="num">2</div>
-      <div class="label">회선 동시 관리</div>
-    </div>
-    <div class="stat-item">
-      <div class="num">27</div>
-      <div class="label">철탑 (이천S/S~24호)</div>
-    </div>
-    <div class="stat-item">
-      <div class="num">150</div>
-      <div class="label">총 접지 대상개소</div>
-    </div>
-    <div class="stat-item">
-      <div class="num">PWA</div>
-      <div class="label">모바일 현장 최적화</div>
-    </div>
-  </div>
-</div>
-
 <!-- ABOUT -->
 <section class="page-section about" id="about">
   <div class="container">
     <div class="about-grid">
       <div class="about-text">
         <h4>SYSTEM OVERVIEW</h4>
-        <h3>송전선로 접지관리,<br/>이제 하나의 시스템에서</h3>
+        <h3>송전선로 접지관리,<br/>하나의 시스템에서</h3>
         <p>
-          접지관리 시스템은 154kV 이천-가남 가공송전선로 설치공사에 특화되어 설계된
-          현장 관리 플랫폼입니다. 철탑별 주접지·보조접지 개소의 설치·철거·면제 상태를
-          A/B/C상 단위로 관리하며, 현장 사진과 GPS 좌표를 결합한 신뢰성 있는 시공 기록을
-          자동으로 생성합니다.
+          접지관리 시스템은 송전선로 건설 공사 현장을 위한 통합 관리 플랫폼입니다.
+          철탑별 주접지·보조접지 개소의 설치·철거·비대상 상태를 A/B/C상 단위로 관리하며,
+          현장 사진과 GPS 좌표를 결합한 신뢰성 있는 시공 기록을 자동으로 생성합니다.
         </p>
         <ul>
-          <li>2회선 다중 철탑 환경에 최적화된 데이터 구조</li>
+          <li>다회선·다철탑 공사 환경에 유연하게 대응하는 데이터 구조</li>
           <li>현장 작업자 중심의 모바일 우선(PWA) 인터페이스</li>
           <li>프로젝트 단위 접근제어 및 감리 이력 추적</li>
           <li>엑셀 기반 보고서 자동 생성 · 감리 제출 즉시 지원</li>
@@ -1235,7 +980,7 @@ export default function LandingPage() {
           <div class="app-topbar">
             <div class="app-brand"><div class="app-logo">⚡</div>접지관리 시스템</div>
             <div class="app-right">
-              한국전력공사 임종화 님 ⚙
+              ○○○ 님 ⚙
               <div class="app-circuit-tabs"><span class="on">1회선</span><span>2회선</span></div>
             </div>
           </div>
@@ -1245,22 +990,22 @@ export default function LandingPage() {
           </div>
           <div class="app-card">
             <h6>공사 개요</h6>
-            <div class="app-kv"><span class="k">사업명</span><span class="v">154kV 이천-가남 등 2개T/L 용량증대 선종교체공사</span></div>
-            <div class="app-kv"><span class="k">공사구간</span><span class="v">이천S/S ~ 24호</span></div>
-            <div class="app-kv"><span class="k">선로명</span><span class="v">154kV 이천-가남T/L</span></div>
-            <div class="app-kv"><span class="k">총 철탑수</span><span class="v blue">27기</span></div>
+            <div class="app-kv"><span class="k">사업명</span><span class="v">○○ 송전선로 공사</span></div>
+            <div class="app-kv"><span class="k">공사구간</span><span class="v">설정한 구간</span></div>
+            <div class="app-kv"><span class="k">선로명</span><span class="v">설정한 선로</span></div>
+            <div class="app-kv"><span class="k">총 철탑수</span><span class="v blue">N기</span></div>
           </div>
           <div class="app-card">
-            <h6>접지 현황 (1회선)</h6>
-            <div class="app-kv"><span class="k">총 대상개소 (비대상 제외)</span><span class="v">150</span></div>
+            <h6>접지 현황</h6>
+            <div class="app-kv"><span class="k">총 대상개소 (비대상 제외)</span><span class="v">—</span></div>
             <div class="app-stat-row">
-              <div class="app-stat gray">미등록<div class="num">143</div></div>
-              <div class="app-stat red">접지중<div class="num">3</div></div>
-              <div class="app-stat green">접지철거<div class="num">4</div></div>
+              <div class="app-stat gray">미등록<div class="num">—</div></div>
+              <div class="app-stat red">접지중<div class="num">—</div></div>
+              <div class="app-stat green">접지철거<div class="num">—</div></div>
             </div>
             <div class="app-progress-wrap">
-              <div class="app-progress-label"><span>전체 진척도</span><span class="pct">3%</span></div>
-              <div class="app-progress-bar"><span></span></div>
+              <div class="app-progress-label"><span>전체 진척도</span><span class="pct">—</span></div>
+              <div class="app-progress-bar"><span style="width:35%"></span></div>
             </div>
           </div>
         </div>
@@ -1274,8 +1019,8 @@ export default function LandingPage() {
   <div class="container">
     <div class="section-head">
       <div class="section-eyebrow">CORE FEATURES</div>
-      <h3>현장이 요구하는 8가지 핵심 기능</h3>
-      <p>접지 개소의 등록부터 감리 보고서 생성까지, 모든 현장 업무를 하나의 시스템으로 처리합니다.</p>
+      <h3>현장이 요구하는 9가지 핵심 기능</h3>
+      <p>접지개소의 등록부터 감리 보고서 생성까지, 모든 현장 업무를 하나의 시스템으로 처리합니다.</p>
     </div>
 
     <div class="features-grid">
@@ -1291,7 +1036,7 @@ export default function LandingPage() {
       <div class="feature-card">
         <div class="feature-icon">⚡</div>
         <h4>접지개소 상태 관리</h4>
-        <p>철탑별 A/B/C상에 대한 주접지·보조접지 설치·철거·면제·미등록 상태를 색상 코드로 직관적으로 표시하여
+        <p>철탑별 A/B/C상에 대한 주접지·보조접지 설치·철거·비대상 상태를 색상 코드로 직관적으로 표시하여
            공사 진척도를 한눈에 파악할 수 있습니다.</p>
         <span class="tag">실시간 · 핵심 기능</span>
       </div>
@@ -1331,7 +1076,7 @@ export default function LandingPage() {
       <div class="feature-card">
         <div class="feature-icon">⚙️</div>
         <h4>프로젝트 설정</h4>
-        <p>공사명·공구·선로명 편집, 다중 선로(線路) 생성, 철탑 일괄 등록(단일/범위/Prefix 지정)을 지원하여
+        <p>공사명·공구·선로명 편집, 다중 선로 생성, 철탑 일괄 등록(단일/범위/Prefix 지정)을 지원하여
            어떠한 규모의 공사에도 유연하게 대응합니다.</p>
         <span class="tag">Bulk Insert · 신규 기능</span>
       </div>
@@ -1382,9 +1127,9 @@ export default function LandingPage() {
       <div class="detail-visual">
         <div class="mock-login">
           <h5>접지관리 시스템 로그인</h5>
-          <div class="mock-field filled">홍길동</div>
-          <div class="mock-field filled">○○감리단</div>
-          <div class="mock-field filled">P-2026-074</div>
+          <div class="mock-field filled">이름</div>
+          <div class="mock-field filled">소속</div>
+          <div class="mock-field filled">프로젝트 번호</div>
           <div class="mock-field">비밀번호</div>
           <div class="mock-btn">프로젝트 접속</div>
         </div>
@@ -1396,11 +1141,11 @@ export default function LandingPage() {
       <div class="detail-text">
         <span class="step">STEP 02</span>
         <h3>회선·철탑별 접지개소 상태 기록</h3>
-        <p>1회선/2회선을 탭으로 전환하며 철탑과 A/B/C상 주접지·보조접지 개소를 선택합니다.
-           각 개소는 설치(grounding)/철거(removed)/면제(exempt)/미등록(none)의 4가지 상태로 구분되며,
-           면제 토글로 해당 개소가 시공 대상이 아님을 명확히 표기합니다.</p>
+        <p>다회선을 탭으로 전환하며 철탑과 A/B/C상 주접지·보조접지 개소를 선택합니다.
+           각 개소는 설치·철거·비대상·미등록의 상태로 구분되며,
+           비대상 토글로 해당 개소가 시공 대상이 아님을 명확히 표기합니다.</p>
         <ul class="detail-list">
-          <li><strong>색상 기반 직관 UI</strong> · 녹색 설치, 적색 철거, 회색 면제</li>
+          <li><strong>색상 기반 직관 UI</strong> · 녹색 철거, 적색 설치중, 회색 비대상</li>
           <li><strong>4계층 데이터</strong> · 회선 → 철탑 → 상(Phase) → 개소</li>
           <li><strong>낙관적 업데이트</strong> · 서버 액션으로 즉시 반영</li>
         </ul>
@@ -1408,7 +1153,7 @@ export default function LandingPage() {
       <div class="detail-visual">
         <div class="app-frame">
           <div class="app-tower-grid">
-            <div class="app-tower"><div class="tname">이천S/S</div><div class="app-phase-row">
+            <div class="app-tower"><div class="tname">S/S</div><div class="app-phase-row">
               <div class="app-phase"><div class="dots"><span class="pdot gray"></span><span class="pdot gray"></span></div>A</div>
               <div class="app-phase"><div class="dots"><span class="pdot gray"></span><span class="pdot gray"></span></div>B</div>
               <div class="app-phase"><div class="dots"><span class="pdot gray"></span><span class="pdot gray"></span></div>C</div>
@@ -1448,7 +1193,7 @@ export default function LandingPage() {
               <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>B</div>
               <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>C</div>
             </div></div>
-            <div class="app-tower"><div class="tname">7.1호</div><div class="app-phase-row">
+            <div class="app-tower"><div class="tname">8호</div><div class="app-phase-row">
               <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>A</div>
               <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>B</div>
               <div class="app-phase"><div class="dots"><span class="pdot empty"></span><span class="pdot empty"></span></div>C</div>
@@ -1468,27 +1213,28 @@ export default function LandingPage() {
     <div class="detail-row">
       <div class="detail-text">
         <span class="step">STEP 03</span>
-        <h3>사진 업로드와 GPS 자동 기록</h3>
-        <p>현장에서 촬영한 사진을 업로드하면 exifr 라이브러리로 사진 내 EXIF GPS 데이터를 자동 추출합니다.
-           EXIF가 없으면 브라우저 Geolocation API를 호출해 보완 좌표를 받아오며, 위치 정확도(accuracy) 값까지
-           함께 저장해 감리 근거의 정확성을 보장합니다.</p>
+        <h3>개소별 접지 상세 · 상태 변경</h3>
+        <p>선택한 철탑을 열면 A/B/C상의 주접지·보조접지 상태를 한 화면에서 확인하고
+           <strong>설치 · 철거 · 비대상 · 비대상 해제</strong> 버튼으로 즉시 상태를 갱신합니다.
+           각 개소마다 <strong>접지중 · 철거완료 · 비대상</strong> 배지가 실시간으로 표시되며
+           담당자 이름과 변경 시각이 자동으로 기록됩니다.</p>
         <ul class="detail-list">
-          <li><strong>Vercel Blob 저장</strong> · 대용량 사진 빠른 업로드/배포</li>
-          <li><strong>지연 로딩</strong> · 목록은 썸네일만, 상세 보기에서 원본 로드</li>
-          <li><strong>이중 GPS 소스</strong> · EXIF 우선, 실패 시 브라우저 위치</li>
+          <li><strong>상(Phase)별 색상 헤더</strong> · A/B/C 구분이 한눈에 보이는 레이아웃</li>
+          <li><strong>원클릭 상태 전환</strong> · 설치 → 철거 → 비대상까지 버튼 하나로</li>
+          <li><strong>기록보기</strong> · 개소별 과거 상태·사진을 바로 조회</li>
         </ul>
       </div>
       <div class="detail-visual">
         <div class="app-modal">
           <div class="app-modal-head">
-            <div class="app-modal-title">1호 접지상세 (1회선)</div>
+            <div class="app-modal-title">○호 접지상세</div>
             <div class="app-modal-btn">📋 작업 이력</div>
           </div>
           <div class="app-phase-head">A상</div>
           <div class="app-phase-body">
             <div class="app-point">
               <div class="app-point-head"><span>주접지</span><span class="app-badge red">접지중</span></div>
-              <div class="app-point-meta">관리: 한국전력공사 임종화 (2026. 4. 17. 오후 12:43:11)</div>
+              <div class="app-point-meta">관리: ○○○ (YYYY-MM-DD HH:MM)</div>
               <div class="app-btn-row">
                 <span class="ab">기록보기</span>
                 <span class="ab primary">설치</span>
@@ -1498,7 +1244,7 @@ export default function LandingPage() {
             </div>
             <div class="app-point">
               <div class="app-point-head"><span>보조접지</span><span class="app-badge green">철거완료</span></div>
-              <div class="app-point-meta">관리: 한국전력공사 임종화 (2026. 4. 17. 오후 12:43:46)</div>
+              <div class="app-point-meta">관리: ○○○ (YYYY-MM-DD HH:MM)</div>
               <div class="app-btn-row">
                 <span class="ab">기록보기</span>
                 <span class="ab primary">설치</span>
@@ -1510,7 +1256,7 @@ export default function LandingPage() {
           <div class="app-phase-body">
             <div class="app-point">
               <div class="app-point-head"><span>주접지</span><span class="app-badge gray">비대상</span></div>
-              <div class="app-point-meta">관리: 한국전력공사 임종화 (2026. 4. 17. 오후 12:43:31)</div>
+              <div class="app-point-meta">관리: ○○○ (YYYY-MM-DD HH:MM)</div>
               <div class="app-btn-row">
                 <span class="ab">기록보기</span>
                 <span class="ab primary">설치</span>
@@ -1526,56 +1272,56 @@ export default function LandingPage() {
     <div class="detail-row reverse">
       <div class="detail-text">
         <span class="step">STEP 04</span>
-        <h3>개소·철탑 이력 타임라인</h3>
-        <p>특정 접지개소의 전체 변경 이력을 사진과 함께 타임라인 형태로 조회할 수 있으며,
-           철탑 단위로는 모든 개소의 작업 이력을 통합해 볼 수 있습니다. 각 이력에는 담당자 이름과
-           소속, 작업 시각이 명확히 기록되어 감리 현장에서 즉각 근거를 제시할 수 있습니다.</p>
+        <h3>작업 이력 타임라인 · 감리 근거</h3>
+        <p>철탑별 모든 개소의 상태 변경 이력을 시계열로 정렬해 보여줍니다. 각 항목에는
+           회선·상(Phase)·주접지/보조접지 구분, 변경 시각, 담당자(소속 포함),
+           그리고 <strong>접지 설치·접지 철거·비대상 지정</strong> 중 어떤 조치가 이루어졌는지가 명확히 표기됩니다.</p>
         <ul class="detail-list">
-          <li><strong>개소별 사진 이력 모달</strong> · 사진 변화 추이 즉시 확인</li>
-          <li><strong>철탑 통합 타임라인</strong> · 시공 전체 흐름 파악</li>
+          <li><strong>개소별 이력 조회</strong> · 개소 단위 사진 변화 추이 확인</li>
+          <li><strong>철탑 통합 타임라인</strong> · 하나의 철탑에서 발생한 모든 작업 요약</li>
           <li><strong>불변 로그</strong> · 기록 삭제 불가, 상태 추가만 가능</li>
         </ul>
       </div>
       <div class="detail-visual">
         <div class="app-modal">
           <div class="app-modal-head">
-            <div class="app-modal-title">1호 작업 이력 타임라인</div>
+            <div class="app-modal-title">○호 작업 이력 타임라인</div>
             <span style="font-size:14px;color:#9ca3af">✕</span>
           </div>
           <div class="app-timeline-item">
             <div>
               <div class="line">1회선 · C상 주접지</div>
-              <div class="when">2026. 4. 17. 오후 3:53:54 · 설비보강부 함현신</div>
-            </div>
-            <div class="status gray">비대상 지정</div>
-          </div>
-          <div class="app-timeline-item">
-            <div>
-              <div class="line">1회선 · C상 주접지</div>
-              <div class="when">2026. 4. 17. 오후 3:53:51 · 설비보강부 함현신</div>
+              <div class="when">YYYY-MM-DD HH:MM · ○○부서 ○○○</div>
             </div>
             <div class="status gray">비대상 지정</div>
           </div>
           <div class="app-timeline-item">
             <div>
               <div class="line">1회선 · A상 보조접지</div>
-              <div class="when">2026. 4. 17. 오후 12:43:46 · 한국전력공사 임종화</div>
+              <div class="when">YYYY-MM-DD HH:MM · ○○부서 ○○○</div>
             </div>
             <div class="status green">접지 철거</div>
           </div>
           <div class="app-timeline-item">
             <div>
               <div class="line">1회선 · B상 보조접지</div>
-              <div class="when">2026. 4. 17. 오후 12:43:36 · 한국전력공사 임종화</div>
+              <div class="when">YYYY-MM-DD HH:MM · ○○부서 ○○○</div>
             </div>
             <div class="status gray">비대상 지정</div>
           </div>
           <div class="app-timeline-item">
             <div>
               <div class="line">1회선 · A상 주접지</div>
-              <div class="when">2026. 4. 17. 오후 12:43:11 · 한국전력공사 임종화</div>
+              <div class="when">YYYY-MM-DD HH:MM · ○○부서 ○○○</div>
             </div>
             <div class="status red">접지 설치</div>
+          </div>
+          <div class="app-timeline-item">
+            <div>
+              <div class="line">1회선 · A상 주접지</div>
+              <div class="when">YYYY-MM-DD HH:MM · ○○부서 ○○○</div>
+            </div>
+            <div class="status green">접지 철거</div>
           </div>
         </div>
       </div>
@@ -1596,10 +1342,10 @@ export default function LandingPage() {
         </ul>
       </div>
       <div class="detail-visual">
-        <div class="mock-file"><span class="name">154kV_이천가남_시공계획서.pdf</span><span class="date">2026-04-10</span></div>
-        <div class="mock-file"><span class="name">접지저항_측정성적서.xlsx</span><span class="date">2026-04-12</span></div>
-        <div class="mock-file"><span class="name">감리보고서_4월3주차.docx</span><span class="date">2026-04-18</span></div>
-        <div class="mock-file"><span class="name">접지개소_현황_보고서.xlsx</span><span class="date">2026-04-19</span></div>
+        <div class="mock-file"><span class="name">시공계획서.pdf</span><span class="date">YYYY-MM-DD</span></div>
+        <div class="mock-file"><span class="name">접지저항_측정성적서.xlsx</span><span class="date">YYYY-MM-DD</span></div>
+        <div class="mock-file"><span class="name">감리보고서.docx</span><span class="date">YYYY-MM-DD</span></div>
+        <div class="mock-file"><span class="name">접지개소_현황_보고서.xlsx</span><span class="date">YYYY-MM-DD</span></div>
         <div class="mock-btn" style="background:var(--kepco-gold);color:var(--kepco-blue-darker);margin-top:14px">📥 보고서 자동 생성 · Excel 다운로드</div>
       </div>
     </div>
@@ -1679,7 +1425,7 @@ export default function LandingPage() {
       <div class="sec-card">
         <div class="sec-icon">📝</div>
         <h4>불변 감사 로그</h4>
-        <p>모든 상태 변경은 누가(user), 언제(timestamp), 무엇을(status) 변경했는지
+        <p>모든 상태 변경은 누가, 언제, 무엇을 변경했는지
            불변 로그로 기록되어 감리 시 완전한 추적성을 보장합니다.</p>
       </div>
       <div class="sec-card">
@@ -1722,8 +1468,7 @@ export default function LandingPage() {
     <div class="foot-top">
       <div class="brand">
         <h5>⚡ 접지관리 시스템 · Groundcheck</h5>
-        <p>154kV 이천-가남 T/L 가공송전선로 설치공사<br/>
-          주접지 및 보조접지 통합 관리 시스템<br/>
+        <p>송전선로 건설 현장을 위한 접지개소 통합 관리 플랫폼<br/>
           Powered by Next.js · TypeScript · Neon Postgres
         </p>
       </div>
@@ -1754,7 +1499,7 @@ export default function LandingPage() {
       </div>
     </div>
     <div class="foot-bottom">
-      <div>© 2026 Groundcheck. 154kV 이천─가남 T/L 접지관리 시스템. All Rights Reserved.</div>
+      <div>© Groundcheck. 송전선로 접지관리 시스템. All Rights Reserved.</div>
       <div>Build: Next.js 16 · React 19 · Neon Postgres</div>
     </div>
   </div>
