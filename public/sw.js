@@ -1,4 +1,4 @@
-const CACHE_NAME = 'groundcheck-v3';
+const CACHE_NAME = 'groundcheck-v5';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -14,6 +14,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Pass through all requests, no aggressive caching for dynamic data
-  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+  // Only handle GET; let the browser do the rest natively.
+  if (event.request.method !== 'GET') return;
+  event.respondWith(
+    fetch(event.request).catch(async () => {
+      const cached = await caches.match(event.request);
+      return cached || new Response('', { status: 504, statusText: 'Offline' });
+    })
+  );
 });

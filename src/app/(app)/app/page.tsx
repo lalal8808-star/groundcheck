@@ -155,9 +155,9 @@ export default function GroundCheckApp() {
       const lineConfigs: LineConfig[] = migrateToLineConfigs(rawConfigs);
 
       const logs = await getLatestGrounding(Date.now(), proj.id, currentUser.id);
-      const regsRes = await fetch('/api/registries?t=' + Date.now() + '&projectId=' + proj.id);
-      const regs = await regsRes.json();
-      setRegistries(regs || []);
+      const regsRes = await fetch('/api/registries?t=' + Date.now() + '&projectId=' + proj.id + '&userId=' + currentUser.id);
+      const regs = regsRes.ok ? await regsRes.json() : [];
+      setRegistries(Array.isArray(regs) ? regs : []);
 
       const builtTowers: Tower[] = [];
       lineConfigs.forEach(line => {

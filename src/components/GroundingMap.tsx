@@ -1,8 +1,24 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Map, MapMarker, MarkerClusterer, useKakaoLoader, CustomOverlayMap } from 'react-kakao-maps-sdk';
+import { useState, useMemo, useEffect } from 'react';
+import { Map, MarkerClusterer, useKakaoLoader, CustomOverlayMap, useMap } from 'react-kakao-maps-sdk';
 import { Tower } from '@/lib/types';
+
+/** 내부 컴포넌트: Map 내에서 행정구역 오버레이를 토글 */
+function DistrictOverlay({ show }: { show: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map) return;
+    const kakao = (window as any).kakao;
+    if (!kakao?.maps?.MapTypeId) return;
+    if (show) {
+      map.addOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+    } else {
+      map.removeOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+    }
+  }, [map, show]);
+  return null;
+}
 
 export default function GroundingMap({
   towers,
@@ -19,6 +35,7 @@ export default function GroundingMap({
   });
 
   const [filter, setFilter] = useState<'all' | 'grounding' | 'removed' | 'exempt' | 'none'>('all');
+  const [showDistrict, setShowDistrict] = useState(false); // 행정구역 경계 표시 여부
 
   // 마커 추출 (GPS 좌표가 하나라도 있는 철탑)
   const mapData = useMemo(() => {
@@ -124,6 +141,27 @@ export default function GroundingMap({
             {label}
           </button>
         ))}
+        {/* 행정구역 경계 버튼 */}
+        <button
+          onClick={() => setShowDistrict(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            flexShrink: 0,
+            padding: '6px 12px',
+            borderRadius: '999px',
+            fontSize: '12px',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            border: showDistrict ? '1.5px solid #7c3aed' : '1.5px solid #e5e7eb',
+            background: showDistrict ? '#ede9fe' : '#fff',
+            color: showDistrict ? '#7c3aed' : '#6b7280',
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+            marginLeft: 'auto',
+          }}
+        >
+          🗺️ 행정구역
+        </button>
       </div>
 
       <div style={{ flex: 1, minHeight: '400px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
@@ -131,8 +169,9 @@ export default function GroundingMap({
           center={defaultCenter}
           style={{ width: '100%', height: '100%' }}
           level={7}
-          mapTypeId={loading ? undefined : (window as any).kakao?.maps?.MapTypeId?.SKYVIEW} // 스카이뷰 기본 설정 (안전하게 접근)
+          mapTypeId={loading ? undefined : (window as any).kakao?.maps?.MapTypeId?.SKYVIEW}
         >
+          <DistrictOverlay show={showDistrict} />
           <MarkerClusterer averageCenter={true} minLevel={8}>
             {filteredData.map((data) => {
               // 마커 색상
