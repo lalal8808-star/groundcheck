@@ -131,7 +131,7 @@ export default function GroundingMap({
           center={defaultCenter}
           style={{ width: '100%', height: '100%' }}
           level={7}
-          mapTypeId={kakao.maps.MapTypeId.SKYVIEW} // 스카이뷰 기본 설정
+          mapTypeId={loading ? undefined : (window as any).kakao?.maps?.MapTypeId?.SKYVIEW} // 스카이뷰 기본 설정 (안전하게 접근)
         >
           <MarkerClusterer averageCenter={true} minLevel={8}>
             {filteredData.map((data) => {

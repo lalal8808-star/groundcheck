@@ -167,6 +167,8 @@ export default function GroundCheckApp() {
             number: cfg.name,
             name: cfg.name,
             lineId: line.id,
+            lat: cfg.lat,
+            lng: cfg.lng,
             points: buildPoints(line.id, i, logs),
           });
         });
