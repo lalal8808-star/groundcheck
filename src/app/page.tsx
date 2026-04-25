@@ -50,6 +50,17 @@ export default function LandingPage() {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: nowrap;
+    gap: 12px;
+  }
+  .topbar .topbar-intro {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar .topbar-links {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   .topbar a { margin-left: 16px; }
   .topbar a:hover { color: #fff; }
@@ -372,6 +383,121 @@ export default function LandingPage() {
     border-radius: 3px;
     font-weight: 600;
     letter-spacing: 0.03em;
+  }
+
+  /* ---------- MAP VIEW MOCKUP (지도보기 신규 기능) ---------- */
+  .app-map-frame {
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 6px 18px rgba(0,33,79,0.08);
+  }
+  .app-map-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #eef0f4;
+    background: #fafbff;
+  }
+  .app-map-chip {
+    font-size: 11px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1.5px solid #e5e7eb;
+    background: #fff;
+    color: #6b7280;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .app-map-chip.on {
+    border-color: #4f46e5;
+    background: #eef2ff;
+    color: #4f46e5;
+  }
+  .app-map-chip .dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+  .app-map-canvas {
+    position: relative;
+    height: 280px;
+    background:
+      linear-gradient(180deg, #eaf3ff 0%, #d6e6fb 100%),
+      repeating-linear-gradient(45deg, transparent 0 18px, rgba(0,82,164,0.04) 18px 19px);
+    overflow: hidden;
+  }
+  /* 지형 느낌의 SVG 라인 (도로/등고선 흉내) */
+  .app-map-canvas::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(ellipse 200px 80px at 30% 60%, rgba(126,170,219,0.35), transparent 70%),
+      radial-gradient(ellipse 240px 100px at 75% 40%, rgba(126,170,219,0.3), transparent 70%);
+  }
+  .app-map-line {
+    position: absolute;
+    height: 2px;
+    background: rgba(79,70,229,0.4);
+    border-radius: 2px;
+    transform-origin: left center;
+  }
+  .app-map-marker {
+    position: absolute;
+    width: 26px; height: 26px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+    border: 2px solid #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .app-map-marker .num {
+    transform: rotate(45deg);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+  }
+  .app-map-marker.red { background: #ef4444; }
+  .app-map-marker.green { background: #10b981; }
+  .app-map-marker.gray { background: #9ca3af; }
+  .app-map-marker.empty { background: #d1d5db; }
+  .app-map-cluster {
+    position: absolute;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: rgba(79,70,229,0.85);
+    border: 3px solid rgba(99,102,241,0.4);
+    box-shadow: 0 4px 12px rgba(79,70,229,0.4);
+    color: #fff;
+    font-weight: 800;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .app-map-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 14px;
+    border-top: 1px solid #eef0f4;
+    font-size: 11px;
+    color: #6b7280;
+    background: #fafbff;
+  }
+  .app-map-legend span .ldot {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
   }
 
   /* ---------- DETAILED FEATURES ---------- */
@@ -920,14 +1046,43 @@ export default function LandingPage() {
     .cta-box h3 { font-size: 22px; }
     .hero { padding: 60px 0 80px; }
   }
+
+  /* 모바일: 헤더·탑바의 텍스트가 줄바꿈 되지 않도록 정리
+     - 탑바 안내문구는 좁은 화면에서 숨김 (링크만 노출)
+     - 로고 서브타이틀(영문 부제) 숨김 → 한글 타이틀에 집중
+     - 헤더 CTA 패딩·폰트 축소로 한 줄 유지 */
+  @media (max-width: 640px) {
+    .topbar .topbar-intro { display: none; }
+    .topbar a { margin-left: 12px; font-size: 11.5px; }
+    .topbar a:first-child { margin-left: 0; }
+    .logo-text p { display: none; }
+    .logo-text h1 { font-size: 16px; }
+    .logo-mark { width: 38px; height: 38px; font-size: 18px; }
+    .header-cta {
+      padding: 8px 14px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    header.main .container {
+      height: 60px;
+      gap: 10px;
+    }
+    .container { padding: 0 16px; }
+    .topbar-links a:nth-child(1) { display: none; }
+  }
+  /* 아주 좁은 화면(≤380px)에서는 탑바 두 번째 링크도 숨겨 한 줄 유지 */
+  @media (max-width: 380px) {
+    .topbar-links a:nth-child(2) { display: none; }
+    .logo-text h1 { font-size: 15px; }
+  }
 `;
   const bodyHtml = String.raw`
 
 <!-- TOP BAR -->
 <div class="topbar">
   <div class="container">
-    <span>전력시설 접지관리 디지털 플랫폼</span>
-    <div>
+    <span class="topbar-intro">전력시설 접지관리 디지털 플랫폼</span>
+    <div class="topbar-links">
       <a href="#features">시스템 소개</a>
       <a href="#security">보안정책</a>
       <a href="/app" target="_blank" rel="noopener">시스템 접속</a>
@@ -992,6 +1147,7 @@ export default function LandingPage() {
           <li>현장 작업자 중심의 모바일 우선(PWA) 인터페이스</li>
           <li>프로젝트 단위 접근제어 및 감리 이력 추적</li>
           <li>엑셀 기반 보고서 자동 생성 · 감리 제출 즉시 지원</li>
+          <li>GPS 기반 지도보기로 공사 구간 전체 현황을 한눈에 확인</li>
         </ul>
       </div>
       <div class="about-visual">
@@ -1038,7 +1194,7 @@ export default function LandingPage() {
   <div class="container">
     <div class="section-head">
       <div class="section-eyebrow">CORE FEATURES</div>
-      <h3>현장이 요구하는 9가지 핵심 기능</h3>
+      <h3>현장이 요구하는 10가지 핵심 기능</h3>
       <p>접지개소의 등록부터 감리 보고서 생성까지, 모든 현장 업무를 하나의 시스템으로 처리합니다.</p>
     </div>
 
@@ -1114,6 +1270,15 @@ export default function LandingPage() {
         <p>설치형 웹앱(PWA) 방식으로 동작하여 현장에서 홈 화면 아이콘으로 바로 접속할 수 있으며
            서비스워커로 불안정한 네트워크 환경에서도 안정적으로 작동합니다.</p>
         <span class="tag">PWA · Service Worker</span>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <h4>지도 보기 · GPS 위치 시각화</h4>
+        <p>철탑별 GPS 좌표를 카카오맵 위에 마커로 표시하여 공사 구간 전체의 접지 진행 상황을
+           지도에서 한눈에 파악할 수 있습니다. 마커는 상태별 색상으로 구분되며, 좌표가 밀집된 구간은
+           자동으로 클러스터링되어 가독성이 유지됩니다.</p>
+        <span class="tag">Kakao Maps · 신규 기능</span>
       </div>
 
     </div>
@@ -1366,6 +1531,56 @@ export default function LandingPage() {
         <div class="mock-file"><span class="name">감리보고서.docx</span><span class="date">YYYY-MM-DD</span></div>
         <div class="mock-file"><span class="name">접지개소_현황_보고서.xlsx</span><span class="date">YYYY-MM-DD</span></div>
         <div class="mock-btn" style="background:var(--kepco-gold);color:var(--kepco-blue-darker);margin-top:14px">📥 보고서 자동 생성 · Excel 다운로드</div>
+      </div>
+    </div>
+
+    <!-- Step 6 -->
+    <div class="detail-row reverse">
+      <div class="detail-text">
+        <span class="step">STEP 06 · NEW</span>
+        <h3>지도 보기 · GPS 기반 현장 시각화</h3>
+        <p>철탑목록·대시보드와 별도로 <strong>지도보기</strong> 탭을 추가했습니다.
+           사진 EXIF 또는 프로젝트 설정에 등록된 GPS 좌표를 기반으로 카카오맵 위에 철탑 마커를 자동 배치하며,
+           각 마커는 해당 철탑의 종합 접지 상태(접지중·철거완료·비대상·미등록)에 따라 색상이 달라집니다.
+           좌표가 밀집된 구간은 클러스터(숫자 표기)로 묶이고, 줌인하면 개별 마커로 분해됩니다.</p>
+        <ul class="detail-list">
+          <li><strong>상태별 필터</strong> · 전체 / 접지중 / 철거완료 / 비대상 / 미등록 한 번에 토글</li>
+          <li><strong>마커 클러스터링</strong> · 수많은 철탑이 있어도 줌 레벨에 맞춰 자동 그룹화</li>
+          <li><strong>마커 클릭 → 상세</strong> · 지도에서 바로 해당 철탑의 접지상세 모달로 이동</li>
+          <li><strong>다중 좌표 소스</strong> · 프로젝트 설정 좌표 우선 → 없으면 최신 사진 EXIF GPS</li>
+        </ul>
+      </div>
+      <div class="detail-visual">
+        <div class="app-map-frame">
+          <div class="app-map-toolbar">
+            <span class="app-map-chip on"><span class="dot" style="background:#4f46e5"></span>전체</span>
+            <span class="app-map-chip"><span class="dot" style="background:#ef4444"></span>접지중</span>
+            <span class="app-map-chip"><span class="dot" style="background:#10b981"></span>철거완료</span>
+            <span class="app-map-chip"><span class="dot" style="background:#9ca3af"></span>비대상</span>
+            <span class="app-map-chip"><span class="dot" style="background:#d1d5db"></span>미등록</span>
+          </div>
+          <div class="app-map-canvas">
+            <!-- 가상의 송전선로 라인 -->
+            <div class="app-map-line" style="top:62%;left:8%;width:80%;transform:rotate(-12deg)"></div>
+            <div class="app-map-line" style="top:38%;left:18%;width:65%;transform:rotate(8deg)"></div>
+            <!-- 마커들 -->
+            <div class="app-map-marker red"   style="top:58%;left:14%"><span class="num">1</span></div>
+            <div class="app-map-marker red"   style="top:54%;left:24%"><span class="num">2</span></div>
+            <div class="app-map-marker green" style="top:50%;left:34%"><span class="num">3</span></div>
+            <div class="app-map-cluster"      style="top:44%;left:46%">7</div>
+            <div class="app-map-marker green" style="top:38%;left:60%"><span class="num">11</span></div>
+            <div class="app-map-marker gray"  style="top:34%;left:70%"><span class="num">12</span></div>
+            <div class="app-map-marker empty" style="top:30%;left:80%"><span class="num">13</span></div>
+            <div class="app-map-marker red"   style="top:68%;left:68%"><span class="num">9</span></div>
+          </div>
+          <div class="app-map-legend">
+            <span><span class="ldot" style="background:#ef4444"></span>접지중</span>
+            <span><span class="ldot" style="background:#10b981"></span>철거완료</span>
+            <span><span class="ldot" style="background:#9ca3af"></span>비대상</span>
+            <span><span class="ldot" style="background:#d1d5db"></span>미등록</span>
+            <span style="margin-left:auto;color:#4f46e5;font-weight:600">⊕ 카카오맵</span>
+          </div>
+        </div>
       </div>
     </div>
 
