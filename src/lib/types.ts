@@ -14,6 +14,8 @@ export type User = {
 
 export type TowerConfig = {
   name: string;
+  lat?: number;
+  lng?: number;
 };
 
 export type LineConfig = {
@@ -62,6 +64,8 @@ export type Tower = {
   name: string;
   lineId: string;
   points: Point[];
+  lat?: number;
+  lng?: number;
 };
 
 export type Registry = {

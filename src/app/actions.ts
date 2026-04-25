@@ -4,8 +4,14 @@ import { sql } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin0000';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const BCRYPT_ROUNDS = 10;
+
+/** 관리자 비밀번호 검증 — 환경변수가 없으면 항상 실패 (안전한 기본값) */
+function verifyAdminPassword(input: string): boolean {
+  if (!ADMIN_PASSWORD || ADMIN_PASSWORD.length < 8) return false;
+  return input === ADMIN_PASSWORD;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -35,7 +41,7 @@ async function assertUserBelongsToProject(userId: string, projectId: string) {
 // ── Project actions ─────────────────────────────────────────────
 
 export async function createProject(adminPassword: string, projectNumber: string, password: string, projectName: string) {
-  if (adminPassword !== ADMIN_PASSWORD) {
+  if (!verifyAdminPassword(adminPassword)) {
     return { success: false, error: '관리자 비밀번호가 올바르지 않습니다.' };
   }
   if (!projectNumber || !password || !projectName) {
@@ -61,7 +67,7 @@ export async function createProject(adminPassword: string, projectNumber: string
 }
 
 export async function getAdminProjects(adminPassword: string) {
-  if (adminPassword !== ADMIN_PASSWORD) {
+  if (!verifyAdminPassword(adminPassword)) {
     return { success: false as const, error: '관리자 비밀번호가 올바르지 않습니다.' };
   }
   try {
@@ -78,7 +84,7 @@ export async function getAdminProjects(adminPassword: string) {
 }
 
 export async function deleteProject(adminPassword: string, projectId: string) {
-  if (adminPassword !== ADMIN_PASSWORD) {
+  if (!verifyAdminPassword(adminPassword)) {
     return { success: false, error: '관리자 비밀번호가 올바르지 않습니다.' };
   }
   try {
@@ -89,8 +95,23 @@ export async function deleteProject(adminPassword: string, projectId: string) {
   }
 }
 
+export async function purgeProject(adminPassword: string, projectId: string) {
+  if (!verifyAdminPassword(adminPassword)) {
+    return { success: false, error: '관리자 비밀번호가 올바르지 않습니다.' };
+  }
+  try {
+    await sql`DELETE FROM grounding_logs WHERE project_id = ${projectId}`;
+    await sql`DELETE FROM registries      WHERE project_id = ${projectId}`;
+    await sql`DELETE FROM users           WHERE project_id = ${projectId}`;
+    await sql`DELETE FROM projects        WHERE id         = ${projectId}`;
+    return { success: true };
+  } catch {
+    return { success: false, error: '완전 삭제에 실패했습니다.' };
+  }
+}
+
 export async function restoreProject(adminPassword: string, projectId: string) {
-  if (adminPassword !== ADMIN_PASSWORD) {
+  if (!verifyAdminPassword(adminPassword)) {
     return { success: false, error: '관리자 비밀번호가 올바르지 않습니다.' };
   }
   try {
@@ -107,7 +128,7 @@ export async function updateProjectCredentials(
   newProjectNumber: string,
   newPassword: string,
 ) {
-  if (adminPassword !== ADMIN_PASSWORD) {
+  if (!verifyAdminPassword(adminPassword)) {
     return { success: false, error: '관리자 비밀번호가 올바르지 않습니다.' };
   }
   if (!newProjectNumber) {
@@ -216,7 +237,12 @@ export async function loginToProject(name: string, affiliation: string, projectN
   }
 }
 
-export async function getProjectSettings(projectId: string) {
+export async function getProjectSettings(projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    return null;
+  }
   try {
     const result = await sql`
       SELECT project_name, construction_section, line_name, tower_configs
@@ -296,13 +322,14 @@ export async function uploadGrounding(data: {
   const lng = typeof data.longitude === 'number' && Math.abs(data.longitude) <= 180 ? data.longitude : null;
   const acc = typeof data.locationAccuracy === 'number' && data.locationAccuracy >= 0 && data.locationAccuracy < 1e7 ? data.locationAccuracy : null;
   try {
-    await sql`
+    const res = await sql`
       INSERT INTO grounding_logs
         (tower_id, point_id, status, photo_data, user_id, project_id, latitude, longitude, location_accuracy)
       VALUES
         (${data.towerId}, ${data.pointId}, ${data.status}, ${data.photoData}, ${data.userId}, ${data.projectId}, ${lat}, ${lng}, ${acc})
+      RETURNING id
     `;
-    return { success: true };
+    return { success: true, logId: res[0].id };
   } catch (e: any) {
     console.error(e);
     return { success: false, error: '업로드에 실패했습니다.' };
@@ -313,7 +340,12 @@ export async function uploadGrounding(data: {
  * 각 접지점의 최신 상태만 가져옴. photo_data는 의도적으로 제외.
  * (페이로드 대폭 절감 — 기록보기 모달에서 필요할 때 getPointPhotoHistory로 지연 로드)
  */
-export async function getLatestGrounding(t?: number, projectId?: string) {
+export async function getLatestGrounding(t: number | undefined, projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    return [];
+  }
   try {
     if (projectId) {
       const result = await sql`
@@ -339,6 +371,58 @@ export async function getLatestGrounding(t?: number, projectId?: string) {
   }
 }
 
+export async function getProjectPhotos(projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    return [];
+  }
+  try {
+    const result = await sql`
+      WITH AbsoluteLatest AS (
+        SELECT DISTINCT ON (tower_id, point_id)
+          tower_id, point_id, status, created_at, photo_data
+        FROM grounding_logs
+        WHERE project_id = ${projectId}
+        ORDER BY tower_id, point_id, created_at DESC
+      )
+      SELECT tower_id, point_id, status, created_at, photo_data
+      FROM AbsoluteLatest
+      WHERE status IN ('grounding', 'removed') AND photo_data IS NOT NULL
+      ORDER BY tower_id, point_id
+    `;
+    return result;
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
+export async function getProjectStatistics(projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    return null;
+  }
+  try {
+    const dailyStats = await sql`
+      SELECT 
+        TO_CHAR(created_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') as date,
+        COUNT(*) as count
+      FROM grounding_logs
+      WHERE project_id = ${projectId} AND status IN ('grounding', 'removed')
+      GROUP BY date
+      ORDER BY date ASC
+    `;
+    return {
+      dailyStats
+    };
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+}
+
 /**
  * 특정 접지점의 전체 히스토리를 photo_data와 함께 반환 (기록보기 모달 전용).
  */
@@ -346,7 +430,13 @@ export async function getPointPhotoHistory(
   towerId: string,
   pointId: string,
   projectId: string,
+  userId: string,
 ) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    return [];
+  }
   try {
     const result = await sql`
       SELECT l.status, l.photo_data, l.created_at,
@@ -369,7 +459,12 @@ export async function getPointPhotoHistory(
 /**
  * 철탑 1기의 모든 포인트에 대한 전체 작업 이력 (타임라인용, photo_data 제외).
  */
-export async function getTowerHistory(towerId: string, projectId: string) {
+export async function getTowerHistory(towerId: string, projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    return [];
+  }
   try {
     const result = await sql`
       SELECT l.point_id, l.status, l.created_at,
@@ -389,6 +484,33 @@ export async function getTowerHistory(towerId: string, projectId: string) {
   }
 }
 
+export async function bulkToggleExempt(
+  entries: { towerId: string; pointId: string }[],
+  userId: string,
+  isExempt: boolean,
+  projectId: string,
+) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    return { success: false, error: '접근 권한이 없습니다.' };
+  }
+  const status = isExempt ? 'exempt' : 'none';
+  try {
+    const results = await Promise.all(
+      entries.map(e =>
+        sql`INSERT INTO grounding_logs (tower_id, point_id, status, user_id, project_id)
+            VALUES (${e.towerId}, ${e.pointId}, ${status}, ${userId}, ${projectId})
+            RETURNING id`
+      )
+    );
+    return { success: true, logIds: results.map(r => r[0].id) };
+  } catch (e: any) {
+    console.error(e);
+    return { success: false, error: '변경에 실패했습니다.' };
+  }
+}
+
 export async function togglePointExempt(
   towerId: string,
   pointId: string,
@@ -404,13 +526,14 @@ export async function togglePointExempt(
   }
   try {
     const status = isExempt ? 'exempt' : 'none';
-    await sql`
+    const res = await sql`
       INSERT INTO grounding_logs (tower_id, point_id, status, user_id, project_id)
       VALUES (${towerId}, ${pointId}, ${status}, ${userId}, ${projectId})
+      RETURNING id
     `;
-    // revalidatePath 제거 (SPA)
-    return { success: true };
-  } catch {
+    return { success: true, logId: res[0].id };
+  } catch (e: any) {
+    console.error(e);
     return { success: false, error: '변경에 실패했습니다.' };
   }
 }
@@ -440,7 +563,12 @@ export async function uploadRegistry(title: string, fileData: string, userId: st
   }
 }
 
-export async function getRegistries(t?: number, projectId?: string) {
+export async function getRegistries(t: number | undefined, projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    return [];
+  }
   try {
     if (projectId) {
       const result = await sql`
@@ -459,7 +587,12 @@ export async function getRegistries(t?: number, projectId?: string) {
   }
 }
 
-export async function getRegistryData(id: string, projectId: string) {
+export async function getRegistryData(id: string, projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    return null;
+  }
   try {
     // projectId 일치 여부 함께 검사 → 다른 프로젝트 데이터 접근 차단
     const result = await sql`
@@ -472,7 +605,12 @@ export async function getRegistryData(id: string, projectId: string) {
   }
 }
 
-export async function deleteRegistry(id: string, projectId: string) {
+export async function deleteRegistry(id: string, projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    throw new Error('접근 권한이 없습니다.');
+  }
   try {
     // projectId 일치 여부 함께 검사 → 다른 프로젝트 레코드 삭제 차단
     await sql`DELETE FROM registries WHERE id = ${id} AND project_id = ${projectId}`;
@@ -482,7 +620,12 @@ export async function deleteRegistry(id: string, projectId: string) {
   }
 }
 
-export async function deleteGroundingLog(towerId: string, pointId: string, projectId: string) {
+export async function deleteGroundingLog(towerId: string, pointId: string, projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    throw new Error('접근 권한이 없습니다.');
+  }
   try {
     await sql`
       DELETE FROM grounding_logs
@@ -495,6 +638,24 @@ export async function deleteGroundingLog(towerId: string, pointId: string, proje
     `;
     revalidatePath('/');
   } catch {
+    throw new Error('삭제에 실패했습니다.');
+  }
+}
+
+export async function deleteGroundingLogById(logId: string, projectId: string, userId: string) {
+  try {
+    await assertUserBelongsToProject(userId, projectId);
+  } catch {
+    throw new Error('접근 권한이 없습니다.');
+  }
+  try {
+    await sql`
+      DELETE FROM grounding_logs
+      WHERE id = ${logId} AND project_id = ${projectId}
+    `;
+    return { success: true };
+  } catch (e: any) {
+    console.error(e);
     throw new Error('삭제에 실패했습니다.');
   }
 }

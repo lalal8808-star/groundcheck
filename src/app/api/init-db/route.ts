@@ -3,13 +3,15 @@ import { sql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin0000';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 export async function GET(request: Request) {
-  // 관리자 토큰 검증 (쿼리 파라미터 또는 헤더)
-  const { searchParams } = new URL(request.url);
-  const token = searchParams.get('token') || request.headers.get('x-admin-token');
-  if (token !== ADMIN_PASSWORD) {
+  // 관리자 토큰 검증 — 헤더만 허용 (쿼리 파라미터는 로그/히스토리에 남음)
+  if (!ADMIN_PASSWORD || ADMIN_PASSWORD.length < 8) {
+    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+  }
+  const token = request.headers.get('x-admin-token');
+  if (!token || token !== ADMIN_PASSWORD) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

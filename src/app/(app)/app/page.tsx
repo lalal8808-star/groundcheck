@@ -2,24 +2,38 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { loginToProject, createProject, getAdminProjects, deleteProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, getPointPhotoHistory, getTowerHistory, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, togglePointExempt, getRegistryData, getProjectSettings, saveProjectSettings } from '../../actions';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+import { loginToProject, createProject, getAdminProjects, deleteProject, purgeProject, restoreProject, updateProjectCredentials, uploadGrounding, getLatestGrounding, getProjectPhotos, getProjectStatistics, getPointPhotoHistory, getTowerHistory, uploadRegistry, getRegistries, deleteRegistry, deleteGroundingLog, deleteGroundingLogById, togglePointExempt, bulkToggleExempt, getRegistryData, getProjectSettings, saveProjectSettings } from '../../actions';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  BarChart, Bar, PieChart, Pie, Cell, Legend 
+} from 'recharts';
 
 import { AdminProject, User, Project, HistoryItem, Point, Tower, Registry, TowerConfig, LineConfig } from '../../../lib/types';
 import { buildPoints, migrateToLineConfigs, genLineId } from '../../../lib/utils';
+import GroundingMap from '../../../components/GroundingMap';
+import LocationPickerModal from '../../../components/LocationPickerModal';
+import { useKakaoLoader } from 'react-kakao-maps-sdk';
 
 const SESSION_KEY = 'groundcheck_session';
 
 export default function GroundCheckApp() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'towers'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'towers' | 'map' | 'stats'>('dashboard');
+  const [statsData, setStatsData] = useState<any>(null);
   const [currentCircuit, setCurrentCircuit] = useState(1);
   const [towers, setTowers] = useState<Tower[]>([]);
   const [registries, setRegistries] = useState<Registry[]>([]);
 
   const [selectedTowerId, setSelectedTowerId] = useState<string | null>(null);
+  const [navTowerId, setNavTowerId] = useState<string | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [locationPickerTowerId, setLocationPickerTowerId] = useState<string | null>(null);
+  const [towerAddress, setTowerAddress] = useState<string>('');
   const [uploadTowerId, setUploadTowerId] = useState<string | null>(null);
+  const [selectedTowerIds, setSelectedTowerIds] = useState<string[]>([]);
   const [uploadType, setUploadType] = useState<'install' | 'remove'>('install');
 
   const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
@@ -35,6 +49,8 @@ export default function GroundCheckApp() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   // 보고서 다운로드
   const [exportingReport, setExportingReport] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pendingUndo, setPendingUndo] = useState<{ logIds: string[]; message: string } | null>(null);
   const [toastMsg, setToastMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
@@ -112,10 +128,10 @@ export default function GroundCheckApp() {
 
   const refreshData = useCallback(async (project?: Project | null) => {
     const proj = project || currentProject;
-    if (!proj) return;
+    if (!proj || !currentUser) return;
     try {
       // Fetch fresh settings from DB
-      const freshSettings = await getProjectSettings(proj.id);
+      const freshSettings = await getProjectSettings(proj.id, currentUser.id);
       if (freshSettings) {
         const updatedProject = {
           ...proj,
@@ -138,7 +154,7 @@ export default function GroundCheckApp() {
       const rawConfigs = freshSettings?.towerConfigs ?? proj.towerConfigs;
       const lineConfigs: LineConfig[] = migrateToLineConfigs(rawConfigs);
 
-      const logs = await getLatestGrounding(Date.now(), proj.id);
+      const logs = await getLatestGrounding(Date.now(), proj.id, currentUser.id);
       const regsRes = await fetch('/api/registries?t=' + Date.now() + '&projectId=' + proj.id);
       const regs = await regsRes.json();
       setRegistries(regs || []);
@@ -165,11 +181,47 @@ export default function GroundCheckApp() {
     } catch (e: any) {
       console.error('Failed to fetch data', e);
     }
-  }, [currentProject?.id]);
+  }, [currentProject?.id, currentUser?.id]);
 
-  const showToast = (msg: string) => {
+  useEffect(() => {
+    if (currentView === 'stats' && currentProject && currentUser) {
+      getProjectStatistics(currentProject.id, currentUser.id).then(setStatsData);
+    }
+  }, [currentView, currentProject, currentUser]);
+
+  const showToast = (msg: string, undoAction?: { logIds: string[] }) => {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
+    if (undoAction) {
+      setPendingUndo({ logIds: undoAction.logIds, message: msg });
+    } else {
+      setPendingUndo(null);
+    }
+    // 토스트는 5초 동안 유지 (취소 기회 제공)
+    setTimeout(() => {
+      setToastMsg(prev => prev === msg ? '' : prev);
+      setPendingUndo(prev => (prev && prev.message === msg) ? null : prev);
+    }, 5000);
+  };
+
+  const handleUndo = async () => {
+    if (!pendingUndo || !currentUser || !currentProject) return;
+    const { logIds } = pendingUndo;
+    setIsLoading(true);
+    setUploadMessage('작업 취소 중...');
+    try {
+      for (const id of logIds) {
+        await deleteGroundingLogById(id, currentProject.id, currentUser.id);
+      }
+      setPendingUndo(null);
+      setToastMsg('');
+      await refreshData();
+      showToast('작업이 취소되었습니다.');
+    } catch (e: any) {
+      alert('실행 취소 실패: ' + e.message);
+    } finally {
+      setIsLoading(false);
+      setUploadMessage('');
+    }
   };
 
   // ── Auth handlers ─────────────────────────────────────────────
@@ -478,7 +530,7 @@ export default function GroundCheckApp() {
         setPendingGPS(null);
         setGpsStatus('idle');
         setGpsSource(null);
-        showToast('업로드가 완료되었습니다.' + (gps ? ' 📍 위치 기록됨' : ''));
+        showToast('업로드가 완료되었습니다.' + (gps ? ' 📍 위치 기록됨' : ''), { logIds: [(resp as any).logId as string] });
       } else {
         alert('업로드 기록 실패: ' + resp.error);
       }
@@ -561,11 +613,37 @@ export default function GroundCheckApp() {
               }
             : t
         ));
+        showToast(makeExempt ? '비대상으로 설정되었습니다.' : '비대상이 해제되었습니다.', { logIds: [(resp as any).logId as string] });
       } else {
         alert('실패: ' + resp.error);
       }
     } catch (e: any) {
       alert('전환 에러: ' + e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBulkExempt = async (makeExempt: boolean) => {
+    if (!currentUser || !currentProject || selectedTowerIds.length === 0) return;
+    if (!confirm(`${selectedTowerIds.length}기의 철탑을 일괄 ${makeExempt ? '비대상 설정' : '해제'} 하시겠습니까?`)) return;
+    setIsLoading(true);
+    try {
+      const selectedTowers = towers.filter(t => selectedTowerIds.includes(t.id));
+      const entries = selectedTowers.flatMap(t => 
+        t.points.map(p => ({ towerId: t.id, pointId: p.id }))
+      );
+
+      const resp = await bulkToggleExempt(entries, currentUser.id, makeExempt, currentProject.id);
+      if (resp.success) {
+        await refreshData();
+        setSelectedTowerIds([]);
+        showToast(`${selectedTowerIds.length}기 일괄 처리가 완료되었습니다.`, { logIds: resp.logIds || [] });
+      } else {
+        alert('일괄 처리 실패: ' + resp.error);
+      }
+    } catch (e: any) {
+      alert('오류: ' + e.message);
     } finally {
       setIsLoading(false);
     }
@@ -622,6 +700,83 @@ export default function GroundCheckApp() {
     }
   };
 
+  const handleExportPdf = async () => {
+    if (!currentProject || !currentUser) return;
+    setExportingPdf(true);
+    try {
+      const photosRes = await getProjectPhotos(currentProject.id, currentUser.id);
+      if (!photosRes) throw new Error('사진 데이터를 가져오지 못했습니다.');
+
+      const towerIndexMap = new Map(towers.map((t, i) => [t.id, i]));
+      const sortedPhotos = [...(photosRes as any[])].sort((a, b) => {
+        const tIdxA = towerIndexMap.get(a.tower_id) ?? 999;
+        const tIdxB = towerIndexMap.get(b.tower_id) ?? 999;
+        if (tIdxA !== tIdxB) return tIdxA - tIdxB;
+        if (a.circuit !== b.circuit) return a.circuit - b.circuit;
+        const phaseOrder = { a: 0, b: 1, c: 2 };
+        const phaseA = phaseOrder[a.phase as 'a'|'b'|'c'] ?? 9;
+        const phaseB = phaseOrder[b.phase as 'a'|'b'|'c'] ?? 9;
+        if (phaseA !== phaseB) return phaseA - phaseB;
+        return a.grounding_type === 'main' ? -1 : 1;
+      });
+
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.top = '-10000px';
+      container.style.width = '800px';
+      container.style.padding = '40px';
+      container.style.background = 'white';
+      container.style.fontFamily = 'sans-serif';
+      document.body.appendChild(container);
+
+      for (let i = 0; i < sortedPhotos.length; i += 2) {
+        if (i > 0) doc.addPage();
+        container.innerHTML = '';
+        const pagePhotos = sortedPhotos.slice(i, i + 2);
+        pagePhotos.forEach((item) => {
+          const div = document.createElement('div');
+          div.style.marginBottom = '40px';
+          div.style.border = '2px solid #333';
+          div.style.padding = '20px';
+          const title = document.createElement('h2');
+          title.style.margin = '0 0 15px 0';
+          title.style.fontSize = '24px';
+          title.innerText = `${item.tower_name} [${item.circuit}회선 ${item.phase.toUpperCase()}상 ${item.grounding_type === 'main' ? '주접지' : '보조접지'}] - ${item.status === 'grounding' ? '설치' : '철거'}`;
+          div.appendChild(title);
+          if (item.photo_data) {
+            const img = document.createElement('img');
+            img.src = item.photo_data;
+            img.style.width = '100%';
+            img.style.maxHeight = '450px';
+            img.style.objectFit = 'contain';
+            img.style.display = 'block';
+            img.style.border = '1px solid #ddd';
+            div.appendChild(img);
+          }
+          const info = document.createElement('div');
+          info.style.marginTop = '15px';
+          info.style.fontSize = '16px';
+          info.style.color = '#555';
+          info.innerText = `작업자: ${item.affiliation} ${item.user_name} | 일시: ${new Date(item.created_at).toLocaleString()}`;
+          div.appendChild(info);
+          container.appendChild(div);
+        });
+        const canvas = await html2canvas(container, { scale: 2 });
+        const imgData = canvas.toDataURL('image/jpeg', 0.85);
+        doc.addImage(imgData, 'JPEG', 0, 0, pageWidth, (canvas.height * pageWidth) / canvas.width);
+      }
+      doc.save(`${currentProject.projectName}_사진대지_${new Date().toISOString().slice(0, 10)}.pdf`);
+      document.body.removeChild(container);
+      showToast('PDF 사진대지 다운로드가 시작되었습니다.');
+    } catch (e: any) {
+      alert('PDF 생성 오류: ' + e.message);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   const getTowerOverallStatus = (tower: Tower) => {
     const points = tower.points.filter(p => p.circuit === currentCircuit);
     const groundingCnt = points.filter(p => p.status === 'grounding').length;
@@ -635,6 +790,12 @@ export default function GroundCheckApp() {
   };
 
   const selectedTower = towers.find(t => t.id === selectedTowerId);
+  const selectedPoint = selectedTower?.points.find(p => p.id === selectedPointId);
+
+  const allPoints = towers.flatMap(t => t.points);
+  const projTotalPoints = allPoints.filter(p => p.status !== 'exempt').length;
+  const projGroundingCnt = allPoints.filter(p => p.status === 'grounding').length;
+  const projRemovedCnt = allPoints.filter(p => p.status === 'removed').length;
 
   // ── Settings handlers ──────────────────────────────────────────
 
@@ -825,9 +986,17 @@ export default function GroundCheckApp() {
           <svg style={{ width: '1.5rem', height: '1.5rem', marginRight: '0.5rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
           <span className="btn-label">철탑목록</span>
         </button>
+        <button className={`nav-btn ${currentView === 'map' ? 'active' : ''}`} onClick={() => setCurrentView('map')}>
+          <svg style={{ width: '1.5rem', height: '1.5rem', marginRight: '0.5rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span className="btn-label">지도보기</span>
+        </button>
+        <button className={`nav-btn ${currentView === 'stats' ? 'active' : ''}`} onClick={() => setCurrentView('stats')}>
+          <svg style={{ width: '1.5rem', height: '1.5rem', marginRight: '0.5rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
+          <span className="btn-label">공정관리</span>
+        </button>
       </nav>
 
-      {currentView === 'dashboard' ? (
+      {currentView === 'dashboard' && (
         <section className="view active">
           <div className="dashboard-container">
             {/* 선로 선택 */}
@@ -962,7 +1131,7 @@ export default function GroundCheckApp() {
                       <button className="photo-btn" onClick={async () => {
                         try {
                           setIsLoading(true);
-                          const dataUrl = await getRegistryData(reg.id, currentProject!.id);
+                          const dataUrl = await getRegistryData(reg.id, currentProject!.id, currentUser!.id);
                           if (!dataUrl) { alert('데이터가 없습니다.'); return; }
                           const [header, base64Data] = dataUrl.split(',');
                           const mimeMatch = header.match(/:(.*?);/);
@@ -981,7 +1150,7 @@ export default function GroundCheckApp() {
                       }} style={{ fontSize: '0.75rem' }}>열기</button>
                       <button className="photo-btn danger" onClick={async () => {
                         if (confirm('삭제하시겠습니까?')) {
-                          try { await deleteRegistry(reg.id, currentProject!.id); refreshData(); } catch (e: any) { alert('오류: ' + e.message); }
+                          try { await deleteRegistry(reg.id, currentProject!.id, currentUser!.id); refreshData(); } catch (e: any) { alert('오류: ' + e.message); }
                         }
                       }} style={{ padding: '4px 8px' }}>🗑️</button>
                     </div>
@@ -991,7 +1160,9 @@ export default function GroundCheckApp() {
             </div>
           </div>
         </section>
-      ) : (
+      )}
+
+      {currentView === 'towers' && (
         <section className="view active">
           <div className="towers-container">
             {/* 선로 선택 */}
@@ -1021,12 +1192,47 @@ export default function GroundCheckApp() {
                 </div>
               );
             })()}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', padding: '0 0.5rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                {selectedTowerIds.length > 0 ? `${selectedTowerIds.length}기 선택됨` : '철탑 리스트'}
+              </div>
+              {selectedTowerIds.length > 0 && (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => handleBulkExempt(true)} style={{ padding: '0.3rem 0.6rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: 6, fontSize: '0.7rem', fontWeight: 700 }}>일괄 비대상</button>
+                  <button onClick={() => setSelectedTowerIds([])} style={{ padding: '0.3rem 0.6rem', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.7rem', fontWeight: 700 }}>취소</button>
+                </div>
+              )}
+            </div>
+
             <div className="tower-list">
               {towers.filter(t => t.lineId === currentLineId).map(tower => {
                 const circuitPoints = tower.points.filter(p => p.circuit === currentCircuit);
+                const isSelected = selectedTowerIds.includes(tower.id);
                 return (
-                  <div key={tower.id} className="tower-item glass-card" onClick={() => setSelectedTowerId(tower.id)}>
-                    <div className="tower-number">{tower.name}</div>
+                  <div key={tower.id} 
+                    className={`tower-item glass-card ${isSelected ? 'selected' : ''}`} 
+                    style={{ border: isSelected ? '2px solid var(--primary)' : undefined }}
+                    onClick={() => {
+                      if (selectedTowerIds.length > 0) {
+                        setSelectedTowerIds(prev => prev.includes(tower.id) ? prev.filter(id => id !== tower.id) : [...prev, tower.id]);
+                      } else {
+                        setSelectedTowerId(tower.id);
+                      }
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setSelectedTowerIds(prev => prev.includes(tower.id) ? prev.filter(id => id !== tower.id) : [...prev, tower.id]);
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                      <div className="tower-number">{tower.name}</div>
+                      {selectedTowerIds.length > 0 && (
+                        <div style={{ width: 16, height: 16, borderRadius: 4, border: '1px solid var(--border-color)', background: isSelected ? 'var(--primary)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {isSelected && <svg style={{ width: 12, height: 12, color: 'white' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                        </div>
+                      )}
+                    </div>
                     {/* A/B/C 3상 × 주/보 2개 = 6개 dot, 상별로 묶음 */}
                     <div className="status-dots" style={{ display: 'flex', gap: '0.5rem' }}>
                       {(['a', 'b', 'c'] as const).map(phase => {
@@ -1055,6 +1261,117 @@ export default function GroundCheckApp() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {currentView === 'stats' && (
+        <section className="view active">
+          <div className="dashboard-container" style={{ paddingBottom: '2rem' }}>
+            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '1.25rem', color: 'var(--text-main)' }}>📊 사업 진행 요약</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+                <div style={{ padding: '1.25rem', background: '#eff6ff', borderRadius: 16, border: '1px solid #bfdbfe' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#1e40af', fontWeight: 600, marginBottom: '0.5rem' }}>전체 공정률</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--primary)' }}>
+                    {projTotalPoints > 0 ? (( (projGroundingCnt + projRemovedCnt) / projTotalPoints) * 100).toFixed(1) : 0}%
+                  </div>
+                </div>
+                <div style={{ padding: '1.25rem', background: '#f0fdf4', borderRadius: 16, border: '1px solid #bbf7d0' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 600, marginBottom: '0.5rem' }}>완료 개소</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#10b981' }}>
+                    {projGroundingCnt + projRemovedCnt} <small style={{ fontSize: '0.9rem', fontWeight: 600, color: '#6b7280' }}>/ {projTotalPoints}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>📈 날짜별 작업 진행 추이</h3>
+              <div style={{ width: '100%', height: 250 }}>
+                {statsData?.dailyStats?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={statsData.dailyStats}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="date" fontSize={10} tickFormatter={(str) => str.split('-').slice(1).join('/')} stroke="#94a3b8" />
+                      <YAxis fontSize={10} stroke="#94a3b8" />
+                      <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                      <Line type="monotone" dataKey="count" name="작업수" stroke="var(--primary)" strokeWidth={3} dot={{ r: 4, fill: 'var(--primary)', strokeWidth: 2, stroke: '#fff' }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>
+                    작업 기록이 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="glass-card" style={{ padding: '1.5rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>⚖️ 회선별 완료 현황 비교</h3>
+              <div style={{ width: '100%', height: 200 }}>
+                {(() => {
+                  const c1Done = towers.flatMap(t => t.points).filter(p => p.circuit === 1 && (p.status === 'grounding' || p.status === 'removed')).length;
+                  const c1Total = towers.flatMap(t => t.points).filter(p => p.circuit === 1 && p.status !== 'exempt').length;
+                  const c2Done = towers.flatMap(t => t.points).filter(p => p.circuit === 2 && (p.status === 'grounding' || p.status === 'removed')).length;
+                  const c2Total = towers.flatMap(t => t.points).filter(p => p.circuit === 2 && p.status !== 'exempt').length;
+                  const barData = [{ name: '1회선', done: c1Done, total: c1Total }, { name: '2회선', done: c2Done, total: c2Total }];
+                  return (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={barData} layout="vertical" margin={{ left: -20, right: 20 }}>
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" fontSize={12} stroke="#475569" fontWeight={700} />
+                        <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                        <Bar dataKey="done" name="완료" fill="var(--primary)" radius={[0, 4, 4, 0]} barSize={20} />
+                        <Bar dataKey="total" name="전체" fill="#e2e8f0" radius={[0, 4, 4, 0]} barSize={20} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {currentView === 'map' && (
+        <section className="view active">
+          <div className="dashboard-container">
+            {/* 선로 선택 */}
+            {(() => {
+              const lineConfigs: LineConfig[] = migrateToLineConfigs(currentProject?.towerConfigs);
+              if (lineConfigs.length <= 1) return null;
+              return (
+                <div className="glass-card" style={{ padding: '0.9rem 1rem', marginBottom: '0.9rem', background: 'white' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>선로 선택</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                    {lineConfigs.map(l => (
+                      <button key={l.id} onClick={() => setCurrentLineId(l.id)}
+                        style={{
+                          padding: '0.4rem 0.85rem',
+                          border: `1px solid ${currentLineId === l.id ? 'var(--primary)' : 'var(--border-color)'}`,
+                          borderRadius: 999,
+                          background: currentLineId === l.id ? 'var(--primary)' : 'white',
+                          color: currentLineId === l.id ? 'white' : 'var(--text-main)',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}>
+                        {l.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="glass-card" style={{ padding: 0, height: 'calc(100vh - 280px)', minHeight: '400px', overflow: 'hidden', position: 'relative' }}>
+              <GroundingMap 
+                towers={towers.filter(t => t.lineId === currentLineId)} 
+                currentCircuit={currentCircuit} 
+                onTowerClick={(tId) => setNavTowerId(tId)} 
+              />
             </div>
           </div>
         </section>
@@ -1278,7 +1595,7 @@ export default function GroundCheckApp() {
                     setTimelineData(null);
                     setTimelineLoading(true);
                     try {
-                      const rows = await getTowerHistory(selectedTower.id, currentProject.id);
+                      const rows = await getTowerHistory(selectedTower.id, currentProject.id, currentUser!.id);
                       setTimelineData((rows as any[]).map(r => ({
                         status: r.status,
                         timestamp: new Date(r.created_at).getTime(),
@@ -1296,6 +1613,12 @@ export default function GroundCheckApp() {
                   style={{ padding: '0.35rem 0.75rem', background: '#eff6ff', color: 'var(--primary)', border: '1px solid #bfdbfe', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
                 >
                   📋 작업 이력
+                </button>
+                <button
+                  onClick={() => setNavTowerId(selectedTower.id)}
+                  style={{ padding: '0.35rem 0.75rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: 8, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  🚗 길안내
                 </button>
                 <button className="modal-close" onClick={() => setSelectedTowerId(null)}>✕</button>
               </div>
@@ -1347,7 +1670,7 @@ export default function GroundCheckApp() {
                                 setViewingHistory(null);
                                 setViewingHistoryLoading(true);
                                 try {
-                                  const rows = await getPointPhotoHistory(selectedTower.id, pt.id, currentProject.id);
+                                  const rows = await getPointPhotoHistory(selectedTower.id, pt.id, currentProject.id, currentUser!.id);
                                   setViewingHistory((rows as any[]).map(r => ({
                                     status: r.status,
                                     timestamp: new Date(r.created_at).getTime(),
@@ -1823,7 +2146,42 @@ export default function GroundCheckApp() {
           </div>
         </div>
       )}
-      <div id="toast" className={`toast ${toastMsg ? 'show' : ''}`}>{toastMsg}</div>
+      {/* Undo Toast */}
+      <div id="toast" className={`toast ${toastMsg ? 'show' : ''}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+        <span>{toastMsg}</span>
+        {pendingUndo && (
+          <button onClick={handleUndo} style={{ background: 'white', color: 'var(--primary)', border: 'none', padding: '0.2rem 0.6rem', borderRadius: 6, fontWeight: 800, fontSize: '0.75rem', cursor: 'pointer' }}>실행취소</button>
+        )}
+      </div>
+
+      {/* Navigation Modal */}
+      {navTowerId && (() => {
+        const t = towers.find(x => x.id === navTowerId);
+        if (!t) return null;
+        return (
+          <div className="modal-overlay active" onClick={() => setNavTowerId(null)}>
+            <div className="modal-content glass-card" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, padding: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '1.5rem', textAlign: 'center' }}>🚗 {t.name} 길안내</h3>
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                <button onClick={() => {
+                  const url = `tmap://route?goalname=${encodeURIComponent(t.name)}&goallat=${t.lat}&goallng=${t.lng}`;
+                  window.location.href = url;
+                }} style={{ padding: '1rem', background: '#ff7000', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: '1rem' }}>티맵(TMAP) 실행</button>
+                <button onClick={() => {
+                  const url = `kakaomap://route?ep=${t.lat},${t.lng}&by=CAR`;
+                  window.location.href = url;
+                }} style={{ padding: '1rem', background: '#fee500', color: '#3c1e1e', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: '1rem' }}>카카오내비 실행</button>
+                <button onClick={() => {
+                  const url = `nmap://route/car?dlat=${t.lat}&dlng=${t.lng}&dname=${encodeURIComponent(t.name)}`;
+                  window.location.href = url;
+                }} style={{ padding: '1rem', background: '#03c75a', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: '1rem' }}>네이버지도 실행</button>
+              </div>
+              <button className="btn-cancel" style={{ width: '100%', marginTop: '1.5rem' }} onClick={() => setNavTowerId(null)}>닫기</button>
+            </div>
+          </div>
+        );
+      })()}
+
       <style jsx>{`
         @keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
       `}</style>
