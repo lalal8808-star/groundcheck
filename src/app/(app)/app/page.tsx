@@ -1199,12 +1199,26 @@ export default function GroundCheckApp() {
               <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
                 {selectedTowerIds.length > 0 ? `${selectedTowerIds.length}기 선택됨` : '철탑 리스트'}
               </div>
-              {selectedTowerIds.length > 0 && (
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => handleBulkExempt(true)} style={{ padding: '0.3rem 0.6rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: 6, fontSize: '0.7rem', fontWeight: 700 }}>일괄 비대상</button>
-                  <button onClick={() => setSelectedTowerIds([])} style={{ padding: '0.3rem 0.6rem', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.7rem', fontWeight: 700 }}>취소</button>
-                </div>
-              )}
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                {selectedTowerIds.length > 0 ? (
+                  <>
+                    <button onClick={() => handleBulkExempt(true)} style={{ padding: '0.3rem 0.65rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>비대상 설정</button>
+                    <button onClick={() => handleBulkExempt(false)} style={{ padding: '0.3rem 0.65rem', background: '#ecfdf5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>해제</button>
+                    <button onClick={() => setSelectedTowerIds([])} style={{ padding: '0.3rem 0.65rem', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>취소</button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      // 선택모드 진입: 전체 선택
+                      const lineIds = towers.filter(t => t.lineId === currentLineId).map(t => t.id);
+                      setSelectedTowerIds(lineIds);
+                    }}
+                    style={{ padding: '0.3rem 0.65rem', background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    ☑️ 일괄선택
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="tower-list">
@@ -1236,26 +1250,26 @@ export default function GroundCheckApp() {
                       )}
                     </div>
                     {/* A/B/C 3상 × 주/보 2개 = 6개 dot, 상별로 묶음 */}
-                    <div className="status-dots" style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div className="status-dots" style={{ display: 'flex', gap: '0.3rem' }}>
                       {(['a', 'b', 'c'] as const).map(phase => {
                         const main = circuitPoints.find(p => p.phase === phase && p.groundingType === 'main');
                         const sub  = circuitPoints.find(p => p.phase === phase && p.groundingType === 'sub');
                         const renderDot = (p: typeof main, title: string) => {
                           if (p?.status === 'exempt') {
                             return (
-                              <span title={title} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 10, height: 10, fontSize: '0.65rem', fontWeight: 900, color: '#94a3b8', lineHeight: 1 }}>✕</span>
+                              <span title={title} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 8, height: 8, fontSize: '0.55rem', fontWeight: 900, color: '#94a3b8', lineHeight: 1 }}>✕</span>
                             );
                           }
                           const cls = p?.status === 'grounding' ? 'grounding' : p?.status === 'removed' ? 'removed' : '';
                           return <div className={`status-circle ${cls}`} title={title} />;
                         };
                         return (
-                          <div key={phase} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                          <div key={phase} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                               {renderDot(main, `${phase.toUpperCase()}상 주접지`)}
                               {renderDot(sub,  `${phase.toUpperCase()}상 보조접지`)}
                             </div>
-                            <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontWeight: 700 }}>{phase.toUpperCase()}</span>
+                            <span style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontWeight: 700 }}>{phase.toUpperCase()}</span>
                           </div>
                         );
                       })}
