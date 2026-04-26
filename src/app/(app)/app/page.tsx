@@ -34,6 +34,7 @@ export default function GroundCheckApp() {
   const [towerAddress, setTowerAddress] = useState<string>('');
   const [uploadTowerId, setUploadTowerId] = useState<string | null>(null);
   const [selectedTowerIds, setSelectedTowerIds] = useState<string[]>([]);
+  const [isSelectMode, setIsSelectMode] = useState(false);
   const [uploadType, setUploadType] = useState<'install' | 'remove'>('install');
 
   const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
@@ -638,9 +639,11 @@ export default function GroundCheckApp() {
 
       const resp = await bulkToggleExempt(entries, currentUser.id, makeExempt, currentProject.id);
       if (resp.success) {
+        const count = selectedTowerIds.length;
         await refreshData();
         setSelectedTowerIds([]);
-        showToast(`${selectedTowerIds.length}기 일괄 처리가 완료되었습니다.`, { logIds: resp.logIds || [] });
+        setIsSelectMode(false);
+        showToast(`${count}기 일괄 처리가 완료되었습니다.`, { logIds: resp.logIds || [] });
       } else {
         alert('일괄 처리 실패: ' + resp.error);
       }
@@ -1197,25 +1200,36 @@ export default function GroundCheckApp() {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', padding: '0 0.5rem' }}>
               <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                {selectedTowerIds.length > 0 ? `${selectedTowerIds.length}기 선택됨` : '철탑 리스트'}
+                {isSelectMode
+                  ? selectedTowerIds.length > 0
+                    ? `${selectedTowerIds.length}기 선택됨 — 탭하여 선택/해제`
+                    : '철탑을 탭하여 선택하세요'
+                  : '철탑 리스트'}
               </div>
               <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                {selectedTowerIds.length > 0 ? (
+                {isSelectMode ? (
                   <>
-                    <button onClick={() => handleBulkExempt(true)} style={{ padding: '0.3rem 0.65rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>비대상 설정</button>
-                    <button onClick={() => handleBulkExempt(false)} style={{ padding: '0.3rem 0.65rem', background: '#ecfdf5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>해제</button>
-                    <button onClick={() => setSelectedTowerIds([])} style={{ padding: '0.3rem 0.65rem', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>취소</button>
+                    <button
+                      onClick={() => { if (selectedTowerIds.length > 0) handleBulkExempt(true); }}
+                      disabled={selectedTowerIds.length === 0}
+                      style={{ padding: '0.3rem 0.65rem', background: selectedTowerIds.length > 0 ? '#fef3c7' : '#f1f5f9', color: selectedTowerIds.length > 0 ? '#92400e' : '#9ca3af', border: `1px solid ${selectedTowerIds.length > 0 ? '#fde68a' : '#e2e8f0'}`, borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: selectedTowerIds.length > 0 ? 'pointer' : 'not-allowed' }}
+                    >비대상 설정</button>
+                    <button
+                      onClick={() => { if (selectedTowerIds.length > 0) handleBulkExempt(false); }}
+                      disabled={selectedTowerIds.length === 0}
+                      style={{ padding: '0.3rem 0.65rem', background: selectedTowerIds.length > 0 ? '#ecfdf5' : '#f1f5f9', color: selectedTowerIds.length > 0 ? '#065f46' : '#9ca3af', border: `1px solid ${selectedTowerIds.length > 0 ? '#6ee7b7' : '#e2e8f0'}`, borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: selectedTowerIds.length > 0 ? 'pointer' : 'not-allowed' }}
+                    >해제</button>
+                    <button
+                      onClick={() => { setIsSelectMode(false); setSelectedTowerIds([]); }}
+                      style={{ padding: '0.3rem 0.65rem', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                    >취소</button>
                   </>
                 ) : (
                   <button
-                    onClick={() => {
-                      // 선택모드 진입: 전체 선택
-                      const lineIds = towers.filter(t => t.lineId === currentLineId).map(t => t.id);
-                      setSelectedTowerIds(lineIds);
-                    }}
-                    style={{ padding: '0.3rem 0.65rem', background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+                    onClick={() => setIsSelectMode(true)}
+                    style={{ padding: '0.3rem 0.65rem', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: 6, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
                   >
-                    ☑️ 일괄선택
+                    비대상 설정
                   </button>
                 )}
               </div>
@@ -1230,8 +1244,11 @@ export default function GroundCheckApp() {
                     className={`tower-item glass-card ${isSelected ? 'selected' : ''}`} 
                     style={{ border: isSelected ? '2px solid var(--primary)' : undefined }}
                     onClick={() => {
-                      if (selectedTowerIds.length > 0) {
-                        setSelectedTowerIds(prev => prev.includes(tower.id) ? prev.filter(id => id !== tower.id) : [...prev, tower.id]);
+                      if (isSelectMode) {
+                        // 선택 모드: 탭으로 개별 선택/해제
+                        setSelectedTowerIds(prev =>
+                          prev.includes(tower.id) ? prev.filter(id => id !== tower.id) : [...prev, tower.id]
+                        );
                       } else {
                         setSelectedTowerId(tower.id);
                       }
