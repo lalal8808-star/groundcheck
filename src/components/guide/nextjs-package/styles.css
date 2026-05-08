@@ -1,0 +1,11 @@
+/* Add to your global stylesheet (e.g. app/globals.css) for the
+   spinner / cursor blink used inside the screens. */
+
+@keyframes gc-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes gc-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}

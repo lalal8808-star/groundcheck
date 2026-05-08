@@ -217,6 +217,138 @@ export default function LandingPage() {
     color: #fff;
   }
   .btn-outline:hover { background: rgba(255,255,255,0.1); border-color: #fff; }
+  /* hero 의 ▶ 가이드 영상 버튼: 골드 점 + 살짝 강조 */
+  .btn-guide { position: relative; }
+  .btn-guide::before {
+    content: "";
+    display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--kepco-gold);
+    margin-right: 4px;
+    box-shadow: 0 0 0 0 rgba(247,166,0,0.6);
+    animation: gc-pulse 2.2s ease-out infinite;
+  }
+  @keyframes gc-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(247,166,0,0.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(247,166,0,0); }
+    100% { box-shadow: 0 0 0 0 rgba(247,166,0,0); }
+  }
+
+  /* ---------- GUIDE VIDEO SECTION ---------- */
+  .guide-section {
+    background:
+      linear-gradient(180deg, #0a0a0a 0%, #14172a 100%);
+    color: #fff;
+    padding: 100px 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .guide-section .section-eyebrow { color: var(--kepco-gold); }
+  .guide-section .section-head h3 { color: #fff; }
+  .guide-section .section-head p { color: rgba(255,255,255,0.7); }
+  .guide-poster {
+    margin: 40px auto 0;
+    max-width: 980px;
+    aspect-ratio: 16 / 9;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0.5) 100%),
+      radial-gradient(ellipse at 30% 30%, rgba(0,82,164,0.35), transparent 60%),
+      radial-gradient(ellipse at 75% 70%, rgba(247,166,0,0.25), transparent 55%),
+      #0a0a0a;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.55);
+    position: relative;
+    overflow: hidden;
+    text-decoration: none;
+    display: block;
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+  .guide-poster:hover { transform: translateY(-3px); box-shadow: 0 36px 70px rgba(0,0,0,0.6); }
+  .guide-poster .gp-badge {
+    position: absolute;
+    top: 18px; left: 18px;
+    font-size: 11px;
+    color: var(--kepco-gold);
+    background: rgba(247,166,0,0.1);
+    border: 1px solid rgba(247,166,0,0.3);
+    padding: 5px 10px;
+    border-radius: 999px;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+  }
+  .guide-poster .gp-len {
+    position: absolute;
+    top: 18px; right: 18px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.65);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  .guide-poster .gp-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    color: #fff;
+    text-align: center;
+    padding: 24px;
+  }
+  .guide-poster .gp-play {
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    background: var(--kepco-gold);
+    color: var(--kepco-blue-darker);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    box-shadow: 0 12px 28px rgba(247,166,0,0.45);
+    transition: transform 0.2s;
+  }
+  .guide-poster:hover .gp-play { transform: scale(1.06); }
+  .guide-poster .gp-title {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+  .guide-poster .gp-sub {
+    font-size: 14px;
+    color: rgba(255,255,255,0.7);
+    max-width: 520px;
+    line-height: 1.6;
+  }
+  .guide-poster .gp-thumbs {
+    position: absolute;
+    bottom: 18px; left: 18px; right: 18px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .guide-poster .gp-thumb {
+    font-size: 10.5px;
+    color: rgba(255,255,255,0.55);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 4px 10px;
+    border-radius: 999px;
+    letter-spacing: 0.02em;
+  }
+  @media (max-width: 720px) {
+    .guide-poster .gp-title { font-size: 20px; }
+    .guide-poster .gp-sub { font-size: 13px; }
+    .guide-poster .gp-play { width: 64px; height: 64px; font-size: 24px; }
+    .guide-poster .gp-thumbs { display: none; }
+    .guide-section { padding: 60px 0; }
+  }
 
   /* ---------- SECTION COMMON ---------- */
   section.page-section {
@@ -1103,6 +1235,7 @@ export default function LandingPage() {
     <nav>
       <ul>
         <li><a href="#about">시스템 개요</a></li>
+        <li><a href="#guide">가이드 영상</a></li>
         <li><a href="#features">주요 기능</a></li>
         <li><a href="#detail">상세 기능</a></li>
         <li><a href="#tech">기술 스택</a></li>
@@ -1125,6 +1258,7 @@ export default function LandingPage() {
     </p>
     <div class="hero-buttons">
       <a href="#features" class="btn btn-primary">주요 기능 살펴보기 →</a>
+      <a href="/guide" class="btn btn-outline btn-guide">▶ 80초 가이드 영상</a>
       <a href="/app" target="_blank" rel="noopener" class="btn btn-outline">시스템 접속</a>
     </div>
   </div>
@@ -1186,6 +1320,45 @@ export default function LandingPage() {
         </div>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- GUIDE VIDEO  ─────────────────────────────────
+     /guide 라우트의 12단계 인터랙티브 가이드 영상으로 연결되는 섹션.
+     클릭 시 풀스크린 GuideScene 페이지로 이동, localStorage 에 진행 위치 저장.
+     ───────────────────────────────────────────── -->
+<section class="page-section guide-section" id="guide">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">GUIDE VIDEO · NEW</div>
+      <h3>로그인부터 보고서까지, 80초 영상으로 한 번에</h3>
+      <p>실제 앱 UI를 거의 그대로 재현한 12단계 인터랙티브 가이드 영상입니다.
+        자동 재생되며 Space · 좌우 키 · 타임라인 드래그로 원하는 단계로 이동할 수 있고,
+        새로고침해도 마지막 재생 위치가 그대로 유지됩니다.</p>
+    </div>
+    <a href="/guide" class="guide-poster" aria-label="가이드 영상 보기">
+      <span class="gp-badge">▶ 인터랙티브 영상</span>
+      <span class="gp-len">12 STEPS · ~80s</span>
+      <div class="gp-center">
+        <div class="gp-play">▶</div>
+        <div class="gp-title">접지관리 시스템 사용 가이드</div>
+        <div class="gp-sub">로그인 · 대시보드 · 철탑목록 · 일괄 비대상 처리 · 개소 상세 · 사진 GPS · 지도 · 공정관리 · 타임라인 · 보고서까지</div>
+      </div>
+      <div class="gp-thumbs">
+        <span class="gp-thumb">01 로그인</span>
+        <span class="gp-thumb">02 대시보드</span>
+        <span class="gp-thumb">03 철탑 목록</span>
+        <span class="gp-thumb">04 일괄 비대상</span>
+        <span class="gp-thumb">05 개소 상세</span>
+        <span class="gp-thumb">06 사진+GPS</span>
+        <span class="gp-thumb">07 지도</span>
+        <span class="gp-thumb">08 공정관리</span>
+        <span class="gp-thumb">09 타임라인</span>
+        <span class="gp-thumb">10 데스크톱 지도</span>
+        <span class="gp-thumb">11 공정 추이</span>
+        <span class="gp-thumb">12 보고서</span>
+      </div>
+    </a>
   </div>
 </section>
 
